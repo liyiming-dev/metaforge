@@ -9,7 +9,7 @@
 
 ## 第 0 步（只有组长做）：建远程仓库
 
-1. 在 GitHub 上新建一个空仓库，名字 `metaforge`，不要勾选自动生成 README。
+1. 在 GitHub 上新建一个空仓库，名字 `metaforge`，可见性选 Private，不要勾选自动生成 README、.gitignore 和 License。
 2. 在本地项目目录里关联并推送：
 
    ```bash
@@ -21,7 +21,7 @@
    ```
 
 3. 在仓库的 Settings → Collaborators 里邀请另外两位组员，让他们接受邀请。
-4. 在 Settings → Branches 里给 `main` 加一条规则：合并前必须有 PR。这样没人能直接往 `main` 推。
+4. 可选：在 Settings → Branches 里给 `main` 加一条规则，要求合并前必须有 PR。免费账号的私有仓库加不了这种规则；加不了就靠约定，所有人都不直接往 `main` 推。
 
 ## 第 1 步：装软件
 
