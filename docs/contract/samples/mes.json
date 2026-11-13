@@ -1,0 +1,161 @@
+{
+  "modules": [
+    { "name": "mes", "displayName": "生产管理", "icon": "AppstoreOutlined", "sort": 10 },
+    { "name": "base", "displayName": "基础设置", "icon": "SettingOutlined", "sort": 20 }
+  ],
+  "models": [
+    {
+      "name": "material",
+      "displayName": "物料",
+      "description": "生产用到的原材料、半成品和辅料",
+      "module": "mes",
+      "showInMenu": true,
+      "sort": 10,
+      "fields": [
+        { "name": "code", "displayName": "物料编码", "type": "string", "length": 64, "unique": true, "readonly": true },
+        { "name": "name", "displayName": "物料名称", "type": "string", "length": 100, "required": true },
+        { "name": "spec", "displayName": "规格", "type": "string", "length": 100 },
+        {
+          "name": "category", "displayName": "类别", "type": "enum", "required": true, "defaultValue": "raw",
+          "options": [
+            { "value": "raw", "label": "原材料" },
+            { "value": "semi", "label": "半成品" },
+            { "value": "aux", "label": "辅料" }
+          ]
+        },
+        { "name": "unit", "displayName": "单位", "type": "string", "length": 20, "defaultValue": "个" },
+        { "name": "safety_stock", "displayName": "安全库存", "type": "decimal", "precision": 18, "scale": 2, "defaultValue": 0 },
+        { "name": "enabled", "displayName": "启用", "type": "boolean", "defaultValue": true },
+        { "name": "remark", "displayName": "备注", "type": "text" }
+      ],
+      "services": [
+        {
+          "name": "fill_code", "displayName": "自动生成物料编码", "trigger": "beforeCreate",
+          "script": "待改写（后端任务 B5 选定脚本引擎后）：如果将要保存的记录没有 code，就调用 code_rule 模型的 generate 服务，用名称为 material 的那条规则生成一个编码，填进记录的 code。"
+        }
+      ],
+      "views": {
+        "list": {
+          "columns": ["code", "name", "spec", "category", "unit", "safety_stock", "enabled"],
+          "searchFields": ["code", "name", "category"],
+          "defaultSort": { "field": "created_at", "order": "desc" },
+          "pageSize": 10
+        },
+        "form": {
+          "groups": [
+            { "title": "基本信息", "columns": 2, "fields": ["code", "name", "spec", "category", "unit", "safety_stock", "enabled"] },
+            { "title": "其它", "columns": 1, "fields": ["remark"] }
+          ],
+          "tabs": []
+        }
+      }
+    },
+    {
+      "name": "product",
+      "displayName": "产品",
+      "description": "对外销售的成品",
+      "module": "mes",
+      "showInMenu": true,
+      "sort": 20,
+      "fields": [
+        { "name": "code", "displayName": "产品编码", "type": "string", "length": 64, "unique": true, "readonly": true },
+        { "name": "name", "displayName": "产品名称", "type": "string", "length": 100, "required": true },
+        { "name": "spec", "displayName": "规格", "type": "string", "length": 100 },
+        { "name": "launch_date", "displayName": "上市日期", "type": "date" },
+        { "name": "bom_lines", "displayName": "BOM 明细", "type": "oneToMany", "relation": { "model": "product_bom", "mappedBy": "product" } }
+      ],
+      "services": [
+        {
+          "name": "fill_code", "displayName": "自动生成产品编码", "trigger": "beforeCreate",
+          "script": "待改写（后端任务 B5 选定脚本引擎后）：如果将要保存的记录没有 code，就调用 code_rule 模型的 generate 服务，用名称为 product 的那条规则生成一个编码，填进记录的 code。"
+        }
+      ],
+      "views": {
+        "list": {
+          "columns": ["code", "name", "spec", "launch_date"],
+          "searchFields": ["code", "name"],
+          "defaultSort": { "field": "created_at", "order": "desc" },
+          "pageSize": 10
+        },
+        "form": {
+          "groups": [
+            { "title": "基本信息", "columns": 2, "fields": ["code", "name", "spec", "launch_date"] }
+          ],
+          "tabs": [
+            { "title": "BOM 明细", "field": "bom_lines" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "product_bom",
+      "displayName": "产品 BOM",
+      "description": "一个产品由哪些物料组成，各用多少",
+      "module": "mes",
+      "showInMenu": false,
+      "sort": 30,
+      "fields": [
+        { "name": "product", "displayName": "产品", "type": "manyToOne", "required": true, "relation": { "model": "product", "displayField": "name" } },
+        { "name": "material", "displayName": "物料", "type": "manyToOne", "required": true, "relation": { "model": "material", "displayField": "name" } },
+        { "name": "quantity", "displayName": "数量", "type": "decimal", "precision": 18, "scale": 4, "required": true, "defaultValue": 1 }
+      ],
+      "services": [],
+      "views": {
+        "list": {
+          "columns": ["product", "material", "quantity"],
+          "searchFields": [],
+          "defaultSort": { "field": "created_at", "order": "asc" },
+          "pageSize": 10
+        },
+        "form": {
+          "groups": [
+            { "title": "基本信息", "columns": 1, "fields": ["product", "material", "quantity"] }
+          ],
+          "tabs": []
+        }
+      }
+    },
+    {
+      "name": "code_rule",
+      "displayName": "编码规则",
+      "description": "按前缀、日期和流水号生成业务编码",
+      "module": "base",
+      "showInMenu": true,
+      "sort": 10,
+      "fields": [
+        { "name": "name", "displayName": "规则名称", "type": "string", "length": 64, "required": true, "unique": true },
+        { "name": "prefix", "displayName": "前缀", "type": "string", "length": 20 },
+        {
+          "name": "date_format", "displayName": "日期格式", "type": "enum", "required": true, "defaultValue": "yyyyMMdd",
+          "options": [
+            { "value": "none", "label": "不带日期" },
+            { "value": "yyyyMM", "label": "年月（202611）" },
+            { "value": "yyyyMMdd", "label": "年月日（20261114）" }
+          ]
+        },
+        { "name": "serial_digits", "displayName": "流水号位数", "type": "integer", "required": true, "defaultValue": 4 },
+        { "name": "current_serial", "displayName": "当前流水号", "type": "integer", "readonly": true, "defaultValue": 0 }
+      ],
+      "services": [
+        {
+          "name": "generate", "displayName": "生成编码", "trigger": "manual", "scope": "record",
+          "script": "待改写（后端任务 B5 选定脚本引擎后）：把这条规则的 current_serial 加 1 并保存，然后返回 前缀 + 按 date_format 格式化的今天日期 + 补零到 serial_digits 位的流水号。多个请求同时调用时不能生成重复的编码。"
+        }
+      ],
+      "views": {
+        "list": {
+          "columns": ["name", "prefix", "date_format", "serial_digits", "current_serial"],
+          "searchFields": ["name"],
+          "defaultSort": { "field": "created_at", "order": "asc" },
+          "pageSize": 10
+        },
+        "form": {
+          "groups": [
+            { "title": "基本信息", "columns": 2, "fields": ["name", "prefix", "date_format", "serial_digits", "current_serial"] }
+          ],
+          "tabs": []
+        }
+      }
+    }
+  ]
+}

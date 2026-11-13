@@ -1,0 +1,21 @@
+# IDE 和系统文件
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 后端
+backend/target/
+# 本机数据库账号和 API key 放这里，不进仓库
+backend/src/main/resources/application-local.yml
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# 本机专用配置和密钥
+.env
+*.local
+*.log

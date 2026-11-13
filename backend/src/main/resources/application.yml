@@ -1,0 +1,14 @@
+server:
+  port: 8200
+
+spring:
+  application:
+    name: metaforge
+  profiles:
+    # 本机专用配置写在 application-local.yml（不进仓库），照着 application-local.example.yml 建
+    active: local
+  datasource:
+    # createDatabaseIfNotExist=true：第一次启动时自动建库，不用手工建
+    url: jdbc:mysql://${MF_DB_HOST:127.0.0.1}:${MF_DB_PORT:3306}/${MF_DB_NAME:metaforge}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MF_DB_USERNAME:root}
+    password: ${MF_DB_PASSWORD:}

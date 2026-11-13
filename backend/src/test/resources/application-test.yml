@@ -1,0 +1,7 @@
+# 测试用内存数据库，这样启动测试不依赖本机 MySQL。
+# 注意：建表、改表这类 MySQL 专有的 SQL 不要在 H2 上测，那些测试要连真实的 MySQL。
+spring:
+  datasource:
+    url: jdbc:h2:mem:metaforge;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
