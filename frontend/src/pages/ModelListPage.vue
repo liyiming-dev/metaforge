@@ -1,8 +1,11 @@
 <script setup lang="ts">
-// 通用列表页的占位实现：F1 只接收模型名并显示一句提示，真正的表格在 F2 实现。
+// 通用列表页：接收模型名，渲染通用的 ModelTable 组件。
+// 列、搜索区、排序都来自模型定义里的 views.list，这里不写任何具体模型。
+import ModelTable from '@/components/ModelTable.vue'
+
 defineProps<{ model: string }>()
 </script>
 
 <template>
-  <a-empty :description="`模型 ${model} 的列表页将在任务 F2 实现`" />
+  <ModelTable :model="model" />
 </template>
