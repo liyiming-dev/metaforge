@@ -6,6 +6,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { dataApi } from '@/api/data'
 import { useModelStore } from '@/stores/model'
 import { SYSTEM_FIELD_TITLES, displayValue } from '@/components/fields/display'
+import ModelForm from '@/components/ModelForm.vue'
 import type { DataRecord, Filter } from '@/types/api'
 import type { FieldDef, ModelDef, SortItem } from '@/types/meta'
 
@@ -228,12 +229,21 @@ const paginationConfig = computed<TablePaginationConfig>(() => ({
   showTotal: (t: number) => `共 ${t} 条`,
 }))
 
+const formOpen = ref(false)
+const editingId = ref<number | null>(null)
+
 function onCreate(): void {
-  message.info('表单在任务 F3 实现')
+  editingId.value = null
+  formOpen.value = true
 }
 
-function onEdit(_record: DataRecord): void {
-  message.info('表单在任务 F3 实现')
+function onEdit(record: DataRecord): void {
+  editingId.value = record.id as number
+  formOpen.value = true
+}
+
+function onSaved(): void {
+  load()
 }
 
 async function onDelete(record: DataRecord): Promise<void> {
@@ -334,6 +344,15 @@ defineExpose({ reload: load })
         </template>
       </template>
     </a-table>
+
+    <ModelForm
+      :open="formOpen"
+      :model="model"
+      :record-id="editingId"
+      :preset-values="presetValues"
+      @update:open="formOpen = $event"
+      @saved="onSaved"
+    />
   </div>
 </template>
 
