@@ -1,16 +1,38 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { MenuProps } from 'ant-design-vue'
-import { HomeOutlined } from '@ant-design/icons-vue'
+import * as AntdIcons from '@ant-design/icons-vue'
+import { AppstoreOutlined, HomeOutlined } from '@ant-design/icons-vue'
+import { storeToRefs } from 'pinia'
 
 import { useMock } from '@/api/request'
+import { useMenuStore } from '@/stores/menu'
 
 const route = useRoute()
 const router = useRouter()
+const menuStore = useMenuStore()
+const { menus } = storeToRefs(menuStore)
 
 const selectedKeys = computed(() => [route.path])
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
+
+// 所有分组默认展开；菜单加载完成后设一次，之后用户手动收起由 v-model:open-keys 接管
+const openKeys = ref<string[]>([])
+watch(
+  menus,
+  (m) => {
+    openKeys.value = m.map((node) => node.key)
+  },
+  { immediate: true },
+)
+
+// 按图标名从 @ant-design/icons-vue 里取组件，取不到就用 AppstoreOutlined 兜底
+function iconOf(name?: string): Component {
+  if (!name) return AppstoreOutlined
+  return (AntdIcons as Record<string, Component>)[name] ?? AppstoreOutlined
+}
 
 const onMenuClick: MenuProps['onClick'] = ({ key }) => {
   router.push(String(key))
@@ -21,12 +43,23 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
   <a-layout class="layout">
     <a-layout-sider theme="light" :width="220" class="sider">
       <div class="logo">MetaForge<span>元铸</span></div>
-      <a-menu mode="inline" :selected-keys="selectedKeys" @click="onMenuClick">
+      <a-menu
+        mode="inline"
+        :selected-keys="selectedKeys"
+        v-model:open-keys="openKeys"
+        @click="onMenuClick"
+      >
         <a-menu-item key="/">
           <template #icon><HomeOutlined /></template>
           首页
         </a-menu-item>
-        <!-- 前端任务 F1：在这里渲染 /api/meta/menus 返回的动态菜单 -->
+        <a-sub-menu v-for="node in menus" :key="node.key">
+          <template #icon><component :is="iconOf(node.icon)" /></template>
+          <template #title>{{ node.displayName }}</template>
+          <a-menu-item v-for="child in node.children" :key="child.path ?? child.key">
+            {{ child.displayName }}
+          </a-menu-item>
+        </a-sub-menu>
       </a-menu>
     </a-layout-sider>
 
