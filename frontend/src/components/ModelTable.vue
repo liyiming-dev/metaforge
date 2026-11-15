@@ -7,6 +7,7 @@ import { dataApi } from '@/api/data'
 import { useModelStore } from '@/stores/model'
 import { SYSTEM_FIELD_TITLES, displayValue } from '@/components/fields/display'
 import ModelForm from '@/components/ModelForm.vue'
+import ManyToOneField from '@/components/fields/ManyToOneField.vue'
 import type { DataRecord, Filter } from '@/types/api'
 import type { FieldDef, ModelDef, SortItem } from '@/types/meta'
 
@@ -48,6 +49,11 @@ function fieldType(name: string): string | undefined {
   return fieldByName(name)?.type
 }
 
+/** 取字段定义（调用方已确认字段存在，这里做非空断言方便传参） */
+function fieldOf(name: string): FieldDef {
+  return fieldByName(name) as FieldDef
+}
+
 const fieldNames = computed(() => new Set(modelDef.value?.fields.map((f) => f.name) ?? []))
 
 /** 列表要显示的列：views.list.columns 去掉 hiddenColumns 和无效字段 */
@@ -58,13 +64,12 @@ const listColumns = computed(() => {
   )
 })
 
-/** 搜索区要显示的字段：去掉 hiddenColumns，以及 manyToOne（本任务先跳过） */
+/** 搜索区要显示的字段：去掉 hiddenColumns */
 const searchFieldNames = computed(() => {
   const hidden = new Set(props.hiddenColumns ?? [])
   return (modelDef.value?.views.list.searchFields ?? []).filter((name) => {
     if (hidden.has(name)) return false
-    const field = fieldByName(name)
-    return !!field && field.type !== 'manyToOne'
+    return !!fieldByName(name)
   })
 })
 
@@ -134,6 +139,12 @@ function buildFilters(): Filter[] {
             value: field.type === 'datetime' ? `${end} 23:59:59` : end,
           })
         }
+        break
+      }
+      case 'manyToOne': {
+        // 值可能是 { id, label }，也可能是纯 id，统一取 id 再比较
+        const id = value && typeof value === 'object' ? (value as { id: unknown }).id : value
+        filters.push({ field: name, op: 'eq', value: id })
         break
       }
     }
@@ -304,6 +315,12 @@ defineExpose({ reload: load })
           v-else-if="fieldType(name) === 'date' || fieldType(name) === 'datetime'"
           v-model:value="searchValues[name]"
           value-format="YYYY-MM-DD"
+        />
+        <ManyToOneField
+          v-else-if="fieldType(name) === 'manyToOne'"
+          :model-value="searchValues[name]"
+          :field="fieldOf(name)"
+          @update:model-value="(v: unknown) => (searchValues[name] = v)"
         />
       </a-form-item>
       <a-form-item>

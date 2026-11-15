@@ -9,6 +9,7 @@ import NumberField from './NumberField.vue'
 import BooleanField from './BooleanField.vue'
 import DateField from './DateField.vue'
 import EnumField from './EnumField.vue'
+import ManyToOneField from './ManyToOneField.vue'
 
 export const fieldComponents: Partial<Record<FieldType, Component>> = {
   string: StringField,
@@ -19,4 +20,5 @@ export const fieldComponents: Partial<Record<FieldType, Component>> = {
   date: DateField,
   datetime: DateField,
   enum: EnumField,
+  manyToOne: ManyToOneField,
 }
