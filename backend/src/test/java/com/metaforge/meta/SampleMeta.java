@@ -20,9 +20,9 @@ import tools.jackson.databind.node.ObjectNode;
  * 并提供“复制一个模型、改动其中一处”的方法，用来构造各种不合规则的定义。
  * 这样测试用的数据和契约示例是同一份，示例写错了测试会先发现。
  */
-final class SampleMeta {
+public final class SampleMeta {
 
-    static final JsonMapper JSON = JsonMapper.builder().build();
+    public static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final MetaBundle BUNDLE = JSON.readValue(
             Path.of("..", "docs", "contract", "samples", "mes.json").toFile(), MetaBundle.class);
@@ -30,16 +30,16 @@ final class SampleMeta {
     private SampleMeta() {
     }
 
-    static MetaBundle bundle() {
+    public static MetaBundle bundle() {
         return BUNDLE;
     }
 
-    static ModelDef model(String name) {
+    public static ModelDef model(String name) {
         return BUNDLE.models().stream().filter(m -> m.name().equals(name)).findFirst().orElseThrow();
     }
 
     /** 示例里的全部模块和模型，作为校验时的上下文。 */
-    static MetaContext context() {
+    public static MetaContext context() {
         Set<String> modules = BUNDLE.modules().stream().map(ModuleDef::name).collect(Collectors.toSet());
         Map<String, ModelDef> models = new LinkedHashMap<>();
         BUNDLE.models().forEach(m -> models.put(m.name(), m));
@@ -47,20 +47,33 @@ final class SampleMeta {
     }
 
     /** 复制示例里的一个模型，对它的 JSON 做一处改动，返回改动后的定义。 */
-    static ModelDef changed(String name, Consumer<ObjectNode> change) {
+    public static ModelDef changed(String name, Consumer<ObjectNode> change) {
         ObjectNode node = JSON.valueToTree(model(name));
         change.accept(node);
         return JSON.treeToValue(node, ModelDef.class);
     }
 
     /** 在模型的 JSON 里找到某个字段的节点。 */
-    static ObjectNode field(ObjectNode modelNode, String fieldName) {
+    public static ObjectNode field(ObjectNode modelNode, String fieldName) {
         ArrayNode fields = (ArrayNode) modelNode.get("fields");
         return (ObjectNode) fields.get(indexOf(fields, "name", fieldName));
     }
 
+    /** 从模型的 JSON 里删掉某个字段。 */
+    public static void removeField(ObjectNode modelNode, String fieldName) {
+        ArrayNode fields = (ArrayNode) modelNode.get("fields");
+        fields.remove(indexOf(fields, "name", fieldName));
+    }
+
+    /** 往模型的 JSON 里加一个字段，返回新字段的节点，可以接着设置别的键。 */
+    public static ObjectNode addField(ObjectNode modelNode, String name, String displayName, String type) {
+        ObjectNode field = ((ArrayNode) modelNode.get("fields")).addObject();
+        field.put("name", name).put("displayName", displayName).put("type", type);
+        return field;
+    }
+
     /** 从字符串数组里删掉一个值，没有就不动。 */
-    static void removeValue(ArrayNode array, String value) {
+    public static void removeValue(ArrayNode array, String value) {
         for (int i = array.size() - 1; i >= 0; i--) {
             if (value.equals(array.get(i).asString())) {
                 array.remove(i);
@@ -69,7 +82,7 @@ final class SampleMeta {
     }
 
     /** 在对象数组里找某个键等于给定值的那一项的下标。 */
-    static int indexOf(ArrayNode array, String key, String value) {
+    public static int indexOf(ArrayNode array, String key, String value) {
         for (int i = 0; i < array.size(); i++) {
             if (value.equals(array.get(i).get(key).asString())) {
                 return i;

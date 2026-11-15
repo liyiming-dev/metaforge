@@ -107,13 +107,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 导入 `mes.json` 后，在 MySQL 里执行 `SHOW TABLES`，能看到四张业务表。
-- [ ] `SHOW CREATE TABLE` 物料表：列和类型符合上面的表，`code` 上有唯一索引。
-- [ ] 给物料模型加一个字段 `brand` 后提交修改，表里多了一列，原有数据没丢。
-- [ ] 再把 `brand` 去掉后提交，`GET` 模型定义里没有它了，表的处理和决策 005 里写的一致。
-- [ ] 修改 `name` 字段的 `type`，返回 400。
-- [ ] 以上全程不重启后端。
-- [ ] 每种字段类型的建表片段各有一条单元测试。
+- [x] 导入 `mes.json` 后，在 MySQL 里执行 `SHOW TABLES`，能看到四张业务表。
+- [x] `SHOW CREATE TABLE` 物料表：列和类型符合上面的表，`code` 上有唯一索引。
+- [x] 给物料模型加一个字段 `brand` 后提交修改，表里多了一列，原有数据没丢。
+- [x] 再把 `brand` 去掉后提交，`GET` 模型定义里没有它了，表的处理和决策 005 里写的一致。
+- [x] 修改 `name` 字段的 `type`，返回 400。
+- [x] 以上全程不重启后端。
+- [x] 每种字段类型的建表片段各有一条单元测试。
 
 ---
 
