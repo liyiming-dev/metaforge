@@ -1,5 +1,9 @@
 package com.metaforge.schema.types;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
+import com.metaforge.common.BizException;
 import com.metaforge.meta.model.FieldDef;
 import com.metaforge.meta.model.FieldTypes;
 import com.metaforge.schema.FieldTypeHandler;
@@ -18,5 +22,39 @@ public final class ManyToOneType implements FieldTypeHandler {
     @Override
     public String columnType(FieldDef field) {
         return "BIGINT";
+    }
+
+    @Override
+    public Object toColumn(FieldDef field, Object value) {
+        if (value == null) {
+            return null;
+        }
+        // 契约允许两种写法：直接传 id，或者把读到的 { "id": 3, "label": "..." } 原样传回来
+        if (value instanceof Map<?, ?> map) {
+            return toColumn(field, map.get("id"));
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException e) {
+                throw BizException.badRequest("应为关联记录的 id");
+            }
+        }
+        throw BizException.badRequest("应为关联记录的 id");
+    }
+
+    @Override
+    public Object toJson(FieldDef field, Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal.longValue();
+        }
+        // 任务 B4 会在这里把 id 换成 { "id": 3, "label": "螺丝 M3" }
+        return value;
     }
 }
