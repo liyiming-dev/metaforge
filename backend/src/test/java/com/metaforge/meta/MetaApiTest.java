@@ -27,6 +27,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import com.metaforge.TestTables;
+
 /** 从接口这一层测试 /api/meta：请求进来，经过校验、存库、刷新内存，再读出来。用内存数据库。 */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -60,9 +62,10 @@ class MetaApiTest {
     void startFromEmpty() throws Exception {
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
         sampleJson = Files.readString(Path.of("..", "docs", "contract", "samples", "mes.json"));
-        // 每个测试都从空的元模型开始，互不影响
+        // 每个测试都从空的元模型和空的数据库开始，互不影响
         jdbc.update("DELETE FROM meta_model");
         jdbc.update("DELETE FROM meta_module");
+        TestTables.dropBusinessTables(jdbc);
         registry.reload();
     }
 
@@ -91,6 +94,84 @@ class MetaApiTest {
                 .andExpect(jsonPath("$.data.fields", hasSize(8)))
                 .andExpect(jsonPath("$.data.tableName").value("md_material"))
                 .andExpect(jsonPath("$.data.views.form.groups", hasSize(2)));
+
+        // 每个模型的表都真的建出来了
+        assertThat(TestTables.businessTables(jdbc))
+                .containsExactly("md_code_rule", "md_material", "md_product", "md_product_bom");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM `md_material`", Integer.class)).isZero();
+    }
+
+    @Test
+    void addingAFieldAddsAColumnWithoutRestart() throws Exception {
+        importSample();
+        jdbc.update("INSERT INTO `md_material` (`name`, `created_at`, `updated_at`) VALUES ('螺丝 M3', NOW(), NOW())");
+        String withBrand = SampleMeta.JSON.writeValueAsString(
+                SampleMeta.changed("material", n -> SampleMeta.addField(n, "brand", "品牌", "string")));
+
+        send(put("/api/meta/models/material"), withBrand).andExpect(status().isOk());
+
+        // 新列出现了，原来的那条数据还在，它在新列上是空值
+        assertThat(jdbc.queryForList("SELECT `name`, `brand` FROM `md_material`"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.get("name")).isEqualTo("螺丝 M3");
+                    assertThat(row.get("brand")).isNull();
+                });
+    }
+
+    @Test
+    void deletingAModelKeepsItsTableAsBackup() throws Exception {
+        importSample();
+        send(post("/api/meta/models"), SUPPLIER).andExpect(status().isOk());
+        assertThat(TestTables.businessTables(jdbc)).contains("md_supplier");
+
+        mvc.perform(delete("/api/meta/models/supplier")).andExpect(status().isOk());
+
+        assertThat(TestTables.businessTables(jdbc))
+                .doesNotContain("md_supplier")
+                .anyMatch(name -> name.startsWith("zz_supplier_"));
+    }
+
+    @Test
+    void sameModelCanBeDeletedAndRecreatedRepeatedly() throws Exception {
+        importSample();
+
+        // 连着“新建、删除”三次。备份表的名字如果只精确到秒，第二次删除就会因为重名而失败
+        for (int i = 0; i < 3; i++) {
+            send(post("/api/meta/models"), SUPPLIER).andExpect(status().isOk());
+            mvc.perform(delete("/api/meta/models/supplier")).andExpect(status().isOk());
+        }
+
+        assertThat(TestTables.businessTables(jdbc).stream().filter(name -> name.startsWith("zz_supplier_")))
+                .hasSize(3);
+    }
+
+    @Test
+    void modelWhoseTableIsMissingCanStillBeDeleted() throws Exception {
+        importSample();
+        send(post("/api/meta/models"), SUPPLIER).andExpect(status().isOk());
+        // 人为制造“定义还在、表没了”的状态
+        jdbc.execute("DROP TABLE `md_supplier`");
+
+        mvc.perform(delete("/api/meta/models/supplier")).andExpect(status().isOk());
+
+        mvc.perform(get("/api/meta/models/supplier")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void leftoverTableIsBackedUpBeforeCreatingTheModel() throws Exception {
+        importSample();
+        // 人为制造“有同名的表、却没有定义”的状态，里面有一条数据
+        jdbc.execute("CREATE TABLE `md_supplier` (`old_data` VARCHAR(20))");
+        jdbc.update("INSERT INTO `md_supplier` (`old_data`) VALUES ('keep me')");
+
+        send(post("/api/meta/models"), SUPPLIER).andExpect(status().isOk());
+
+        // 新表是按定义建的；原来那张表被改名留作备份，数据没有丢
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM `md_supplier`", Integer.class)).isZero();
+        String backup = TestTables.businessTables(jdbc).stream()
+                .filter(name -> name.startsWith("zz_supplier_")).findFirst().orElseThrow();
+        assertThat(jdbc.queryForObject("SELECT `old_data` FROM `" + backup + "`", String.class)).isEqualTo("keep me");
     }
 
     @Test
@@ -209,6 +290,8 @@ class MetaApiTest {
         // 第二个模型不合规则，所以第一个模型和模块也都没有被创建
         mvc.perform(get("/api/meta/models")).andExpect(jsonPath("$.data", hasSize(0)));
         mvc.perform(get("/api/meta/modules")).andExpect(jsonPath("$.data", hasSize(0)));
+        // 校验在建表之前，所以也没有任何表被建出来
+        assertThat(TestTables.businessTables(jdbc)).isEmpty();
     }
 
     @Test

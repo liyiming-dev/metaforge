@@ -18,10 +18,14 @@ import com.metaforge.meta.model.MenuNode;
 import com.metaforge.meta.model.MetaBundle;
 import com.metaforge.meta.model.ModelDef;
 import com.metaforge.meta.model.ModuleDef;
+import com.metaforge.schema.SchemaSync;
 
 /**
- * 元模型的业务逻辑。每个写操作都是同一个顺序：
- * 校验（MetaValidator）→ 补默认值（MetaDefaults）→ 写数据库（MetaRepository）→ 刷新内存（MetaRegistry）。
+ * 元模型的业务逻辑。保存一个模型的顺序固定是：
+ * 校验（MetaValidator）→ 补默认值（MetaDefaults）→ 改表（SchemaSync）→ 存定义（MetaRepository）→ 刷新内存（MetaRegistry）。
+ *
+ * 为什么“改表”排在“存定义”前面：改表语句执行了就不能回滚。先改表，失败了定义还是旧的，
+ * 表和定义仍然对得上；反过来的话，可能出现定义说有某个字段、表里却没有这一列。
  *
  * 写操作都加了 synchronized：校验用的是内存里的定义，如果两个保存同时进行，
  * 可能各自校验通过、合起来却不合规则。一次只让一个写操作进行，就没有这个问题。
@@ -32,11 +36,14 @@ public class MetaService {
 
     private final MetaRepository repository;
     private final MetaRegistry registry;
+    private final SchemaSync schemaSync;
     private final TransactionTemplate transaction;
 
-    public MetaService(MetaRepository repository, MetaRegistry registry, PlatformTransactionManager transactionManager) {
+    public MetaService(MetaRepository repository, MetaRegistry registry, SchemaSync schemaSync,
+            PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.registry = registry;
+        this.schemaSync = schemaSync;
         this.transaction = new TransactionTemplate(transactionManager);
     }
 
@@ -85,7 +92,15 @@ public class MetaService {
         }
         MetaValidator.validateModel(input, null, registry.context());
         ModelDef model = MetaDefaults.normalize(input);
-        repository.insertModel(model);
+
+        schemaSync.create(model);
+        try {
+            repository.insertModel(model);
+        } catch (RuntimeException e) {
+            // 表建好了但定义没存成：把刚建的空表删掉，不留下没人认领的表
+            schemaSync.dropQuietly(model);
+            throw e;
+        }
         registry.reload();
         return model;
     }
@@ -97,13 +112,15 @@ public class MetaService {
         }
         MetaValidator.validateModel(input, old, registry.context());
         ModelDef model = MetaDefaults.normalize(input);
+
+        schemaSync.alter(old, model);
         repository.updateModel(model);
         registry.reload();
         return model;
     }
 
     public synchronized void deleteModel(String name) {
-        registry.requireModel(name);
+        ModelDef model = registry.requireModel(name);
         for (ModelDef other : registry.models()) {
             if (other.name().equals(name)) {
                 continue;
@@ -115,6 +132,7 @@ public class MetaService {
                 }
             }
         }
+        schemaSync.drop(model);
         repository.deleteModel(name);
         registry.reload();
     }
@@ -126,9 +144,10 @@ public class MetaService {
     }
 
     /**
-     * 导入一个包：不存在的新建，已存在的按修改处理。
-     * 先把整个包校验完，全部通过才开始写库，并且写库放在一个事务里，
-     * 所以要么全部生效，要么全部不生效。
+     * 导入一个包：不存在的新建，已存在的按修改处理。分三步：
+     * 1. 把整个包校验完。有一处不合规则就整个拒绝，这时什么都还没动。
+     * 2. 建表、改表。这一步不能回滚；如果中途失败，把这次新建的表删掉。
+     * 3. 在一个事务里保存所有定义，要么全部存上，要么全部不存。
      */
     public synchronized ImportResult importBundle(MetaBundle bundle) {
         if (bundle == null) {
@@ -137,7 +156,7 @@ public class MetaService {
         List<ModuleDef> modules = bundle.modules() == null ? List.of() : bundle.modules();
         List<ModelDef> models = bundle.models() == null ? List.of() : bundle.models();
 
-        // 校验时的上下文 = 已有的定义 + 这个包里的定义。包里的模型可以互相引用。
+        // 第 1 步：校验。上下文 = 已有的定义 + 这个包里的定义，因为包里的模型可以互相引用
         MetaContext existing = registry.context();
         Set<String> moduleNames = new HashSet<>(existing.moduleNames());
         for (ModuleDef module : modules) {
@@ -159,20 +178,38 @@ public class MetaService {
         for (ModelDef model : models) {
             MetaValidator.validateModel(model, existing.models().get(model.name()), context);
         }
+        List<ModelDef> normalized = models.stream().map(MetaDefaults::normalize).toList();
 
-        transaction.executeWithoutResult(status -> {
-            for (ModuleDef module : modules) {
-                repository.saveModule(MetaDefaults.normalize(module));
-            }
-            for (ModelDef model : models) {
-                ModelDef normalized = MetaDefaults.normalize(model);
-                if (existing.models().containsKey(model.name())) {
-                    repository.updateModel(normalized);
+        // 第 2 步：建表、改表
+        List<ModelDef> created = new ArrayList<>();
+        try {
+            for (ModelDef model : normalized) {
+                ModelDef old = existing.models().get(model.name());
+                if (old == null) {
+                    schemaSync.create(model);
+                    created.add(model);
                 } else {
-                    repository.insertModel(normalized);
+                    schemaSync.alter(old, model);
                 }
             }
-        });
+
+            // 第 3 步：保存定义
+            transaction.executeWithoutResult(status -> {
+                for (ModuleDef module : modules) {
+                    repository.saveModule(MetaDefaults.normalize(module));
+                }
+                for (ModelDef model : normalized) {
+                    if (existing.models().containsKey(model.name())) {
+                        repository.updateModel(model);
+                    } else {
+                        repository.insertModel(model);
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            created.forEach(schemaSync::dropQuietly);
+            throw e;
+        }
         registry.reload();
         return new ImportResult(modules.size(), models.size());
     }
