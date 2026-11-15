@@ -1,5 +1,6 @@
 package com.metaforge.schema.types;
 
+import com.metaforge.common.BizException;
 import com.metaforge.meta.model.FieldDef;
 import com.metaforge.meta.model.FieldTypes;
 import com.metaforge.schema.FieldTypeHandler;
@@ -15,5 +16,11 @@ public final class OneToManyType implements FieldTypeHandler {
     @Override
     public String columnType(FieldDef field) {
         return null;
+    }
+
+    @Override
+    public Object toColumn(FieldDef field, Object value) {
+        // 一对多的数据存在子表里，不能直接写在父表的记录上
+        throw BizException.badRequest("一对多字段不能直接写值，请对子表调用接口");
     }
 }
