@@ -12,3 +12,7 @@ spring:
     url: jdbc:mysql://${MF_DB_HOST:127.0.0.1}:${MF_DB_PORT:3306}/${MF_DB_NAME:metaforge}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${MF_DB_USERNAME:root}
     password: ${MF_DB_PASSWORD:}
+  sql:
+    init:
+      # 每次启动都执行 schema.sql，建好元模型自己的表
+      mode: always

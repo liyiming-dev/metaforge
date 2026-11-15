@@ -54,13 +54,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 导入 `mes.json`，返回 `{ "modules": 2, "models": 4 }`。
-- [ ] `GET /api/meta/models/material` 返回 8 个字段，`views` 完整，`tableName` 有值。
-- [ ] `GET /api/meta/menus` 返回“生产管理”（物料、产品）和“基础设置”（编码规则），顺序正确，`product_bom` 不出现。
-- [ ] 新建一个不带 `views` 的模型，返回的定义里有按规则生成的默认视图。
-- [ ] 模型名传 `Bad Name` 返回 400 和中文提示；重复新建返回 409；枚举字段没有选项返回 400；关联指向不存在的模型返回 400。
-- [ ] 重启后端后，定义还在。
-- [ ] `.\mvnw.cmd test` 通过，`MetaValidator` 至少有 6 条测试。
+- [x] 导入 `mes.json`，返回 `{ "modules": 2, "models": 4 }`。
+- [x] `GET /api/meta/models/material` 返回 8 个字段，`views` 完整，`tableName` 有值。
+- [x] `GET /api/meta/menus` 返回“生产管理”（物料、产品）和“基础设置”（编码规则），顺序正确，`product_bom` 不出现。
+- [x] 新建一个不带 `views` 的模型，返回的定义里有按规则生成的默认视图。
+- [x] 模型名传 `Bad Name` 返回 400 和中文提示；重复新建返回 409；枚举字段没有选项返回 400；关联指向不存在的模型返回 400。
+- [x] 重启后端后，定义还在。
+- [x] `.\mvnw.cmd test` 通过，`MetaValidator` 至少有 6 条测试。
 
 ---
 
