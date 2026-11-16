@@ -1,0 +1,52 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor "平台开发者" as DEV
+actor "业务用户" as USER
+
+rectangle "MetaForge 低代码平台" {
+  usecase "管理模块\nFR-01" as UC01
+  usecase "新建模型\nFR-02" as UC02
+  usecase "定义字段\nFR-03、FR-04" as UC03
+  usecase "定义视图\nFR-05" as UC04
+  usecase "定义服务\nFR-06" as UC05
+  usecase "修改模型\nFR-08" as UC06
+  usecase "删除模型\nFR-09" as UC07
+  usecase "导入导出元模型\nFR-10" as UC08
+
+  usecase "浏览菜单进入模型页\nFR-12" as UC09
+  usecase "查询记录\nFR-14、FR-15" as UC10
+  usecase "新增记录\nFR-16~FR-19" as UC11
+  usecase "编辑记录\nFR-20" as UC12
+  usecase "删除记录\nFR-21" as UC13
+  usecase "选择关联记录\nFR-22" as UC14
+  usecase "维护子表明细\nFR-23" as UC15
+  usecase "执行服务按钮\nFR-24" as UC16
+}
+
+DEV --> UC01
+DEV --> UC02
+DEV --> UC03
+DEV --> UC04
+DEV --> UC05
+DEV --> UC06
+DEV --> UC07
+DEV --> UC08
+
+USER --> UC09
+USER --> UC10
+USER --> UC11
+USER --> UC12
+USER --> UC13
+USER --> UC14
+USER --> UC15
+USER --> UC16
+
+UC02 ..> UC03 : <<include>>
+UC11 ..> UC14 : <<extend>>
+UC12 ..> UC15 : <<extend>>
+UC02 ..> UC09 : 保存后立即可用
+
+@enduml
