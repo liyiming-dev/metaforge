@@ -19,6 +19,31 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/HomePage.vue'),
         meta: { title: '首页' },
       },
+      {
+        path: 'design/modules',
+        name: 'design-modules',
+        component: () => import('@/pages/design/ModuleListPage.vue'),
+        meta: { title: '模块管理' },
+      },
+      {
+        path: 'design/models',
+        name: 'design-models',
+        component: () => import('@/pages/design/ModelDesignListPage.vue'),
+        meta: { title: '模型管理' },
+      },
+      {
+        path: 'design/models/new',
+        name: 'design-model-new',
+        component: () => import('@/pages/design/ModelEditPage.vue'),
+        meta: { title: '新建模型' },
+      },
+      {
+        path: 'design/models/:name',
+        name: 'design-model-edit',
+        component: () => import('@/pages/design/ModelEditPage.vue'),
+        props: true,
+        meta: { title: '编辑模型' },
+      },
     ],
   },
   {

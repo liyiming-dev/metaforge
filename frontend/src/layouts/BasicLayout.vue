@@ -4,7 +4,7 @@ import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { MenuProps } from 'ant-design-vue'
 import * as AntdIcons from '@ant-design/icons-vue'
-import { AppstoreOutlined, HomeOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, HomeOutlined, ToolOutlined } from '@ant-design/icons-vue'
 import { storeToRefs } from 'pinia'
 
 import { useMock } from '@/api/request'
@@ -15,7 +15,13 @@ const router = useRouter()
 const menuStore = useMenuStore()
 const { menus } = storeToRefs(menuStore)
 
-const selectedKeys = computed(() => [route.path])
+const selectedKeys = computed(() => {
+  // 新建/编辑模型页也高亮"模型管理"
+  if (route.path.startsWith('/design/models')) {
+    return ['/design/models']
+  }
+  return [route.path]
+})
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
 
 // 所有分组默认展开；菜单加载完成后设一次，之后用户手动收起由 v-model:open-keys 接管
@@ -23,7 +29,7 @@ const openKeys = ref<string[]>([])
 watch(
   menus,
   (m) => {
-    openKeys.value = m.map((node) => node.key)
+    openKeys.value = [...m.map((node) => node.key), 'design']
   },
   { immediate: true },
 )
@@ -59,6 +65,12 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
           <a-menu-item v-for="child in node.children" :key="child.path ?? child.key">
             {{ child.displayName }}
           </a-menu-item>
+        </a-sub-menu>
+        <a-sub-menu key="design">
+          <template #icon><ToolOutlined /></template>
+          <template #title>平台设计</template>
+          <a-menu-item key="/design/modules">模块管理</a-menu-item>
+          <a-menu-item key="/design/models">模型管理</a-menu-item>
         </a-sub-menu>
       </a-menu>
     </a-layout-sider>
