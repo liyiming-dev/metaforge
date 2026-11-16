@@ -64,6 +64,13 @@ const savedFields = ref<Set<string>>(new Set())
 const activeTab = ref('basic')
 const saving = ref(false)
 
+/** 标识输入的即时校验提示（新建时，输入非法字符立刻红字提示） */
+const nameError = computed(() => {
+  const name = draft.value.name
+  if (!name) return ''
+  return NAME_PATTERN.test(name) ? '' : '小写字母开头，只含小写字母、数字、下划线，最长 30 位'
+})
+
 function typeLabel(type: string): string {
   return FIELD_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
 }
@@ -397,6 +404,8 @@ async function onSave(): Promise<void> {
     modelStore.invalidate(draft.value.name)
     await menuStore.reload()
     if (!isEdit.value) {
+      // 新建成功后，字段都算"已保存"，跳到编辑页时标识和类型要禁用
+      savedFields.value = new Set(draft.value.fields.map((f) => f.name))
       router.push(`/design/models/${draft.value.name}`)
     } else {
       // 编辑后刷新草稿（重新取定义，更新 savedFields）
@@ -436,7 +445,12 @@ async function copyJson(): Promise<void> {
       <!-- 标签页 1：基本信息 -->
       <a-tab-pane key="basic" tab="基本信息">
         <a-form layout="vertical" class="tab-form">
-          <a-form-item label="标识" required>
+          <a-form-item
+            label="标识"
+            required
+            :validate-status="nameError ? 'error' : undefined"
+            :help="nameError"
+          >
             <a-input
               v-model:value="draft.name"
               :disabled="isEdit"
@@ -482,7 +496,7 @@ async function copyJson(): Promise<void> {
             class="field-col name"
             :disabled="isSavedField(field.name)"
             placeholder="标识"
-            @change="onFieldNameChanged(field)"
+            @blur="onFieldNameChanged(field)"
           />
           <a-input v-model:value="field.displayName" class="field-col name" placeholder="显示名" />
           <a-select
