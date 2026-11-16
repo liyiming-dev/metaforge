@@ -7,7 +7,8 @@ import { dataApi } from '@/api/data'
 import { ApiError } from '@/api/request'
 import { useModelStore } from '@/stores/model'
 import { fieldComponents } from '@/components/fields'
-import type { DataRecord } from '@/types/api'
+import ModelTable from '@/components/ModelTable.vue'
+import type { DataRecord, Filter } from '@/types/api'
 import type { FieldDef, ModelDef } from '@/types/meta'
 
 const props = defineProps<{
@@ -28,10 +29,12 @@ const formState = ref<Record<string, unknown>>({})
 const fieldErrors = ref<Record<string, string>>({})
 const saving = ref(false)
 const formRef = ref<{ validate: () => Promise<unknown> } | null>(null)
+/** 当前编辑的记录 id：新建时是 null；新建保存成功且有子表标签页时，会更新成刚保存的记录 id */
+const currentRecordId = ref<number | null>(null)
 
 const title = computed(() => {
   const displayName = modelDef.value?.displayName ?? ''
-  return props.recordId != null ? `编辑${displayName}` : `新增${displayName}`
+  return currentRecordId.value != null ? `编辑${displayName}` : `新增${displayName}`
 })
 
 // 过滤后的表单分组：去掉组里写了但模型没有的、oneToMany、presetValues 里的字段
@@ -65,6 +68,29 @@ const formRules = computed(() => {
   return rules
 })
 
+// 子表标签页：views.form.tabs 每项对应一个 oneToMany 字段
+const formTabs = computed(() => {
+  return (modelDef.value?.views.form.tabs ?? [])
+    .map((tab) => {
+      const field = modelDef.value?.fields.find((f) => f.name === tab.field)
+      return {
+        title: tab.title,
+        field: tab.field,
+        childModel: field?.relation?.model ?? '',
+        mappedBy: field?.relation?.mappedBy ?? '',
+      }
+    })
+    .filter((tab) => tab.childModel !== '' && tab.mappedBy !== '')
+})
+
+function tabFixedFilters(tab: { mappedBy: string }): Filter[] {
+  return [{ field: tab.mappedBy, op: 'eq', value: currentRecordId.value }]
+}
+
+function tabPresetValues(tab: { mappedBy: string }): DataRecord {
+  return { [tab.mappedBy]: currentRecordId.value }
+}
+
 function hasComponent(field: FieldDef): boolean {
   return field.type in fieldComponents
 }
@@ -80,8 +106,8 @@ async function initForm(): Promise<void> {
     if (field.type === 'oneToMany') continue
     state[field.name] = field.defaultValue ?? null
   }
-  if (props.recordId != null) {
-    const record = await dataApi.get(props.model, props.recordId)
+  if (currentRecordId.value != null) {
+    const record = await dataApi.get(props.model, currentRecordId.value)
     for (const field of modelDef.value.fields) {
       if (field.type === 'oneToMany') continue
       if (field.name in record) {
@@ -101,8 +127,10 @@ watch(
   () => props.open,
   async (open) => {
     if (open) {
+      currentRecordId.value = props.recordId ?? null
       await initForm()
     } else {
+      currentRecordId.value = null
       formState.value = {}
       fieldErrors.value = {}
       modelDef.value = null
@@ -122,7 +150,7 @@ function isReadonly(field: FieldDef): boolean {
 }
 
 function showAutoHint(field: FieldDef): boolean {
-  if (field.readonly !== true || props.recordId != null) return false
+  if (field.readonly !== true || currentRecordId.value != null) return false
   const value = formState.value[field.name]
   return value === null || value === undefined || value === ''
 }
@@ -152,13 +180,20 @@ async function onSubmit(): Promise<void> {
         data[field.name] = value
       }
     }
-    const saved =
-      props.recordId != null
-        ? await dataApi.update(props.model, props.recordId, data)
-        : await dataApi.create(props.model, data)
+    const isCreate = currentRecordId.value == null
+    const saved = isCreate
+      ? await dataApi.create(props.model, data)
+      : await dataApi.update(props.model, currentRecordId.value as number, data)
     message.success('已保存')
-    emit('saved', saved)
-    emit('update:open', false)
+    if (isCreate && formTabs.value.length > 0) {
+      // 新建成功且模型有子表标签页：抽屉不关，转成编辑刚保存的这条记录，方便接着加明细
+      currentRecordId.value = (saved as DataRecord).id as number
+      await initForm()
+      emit('saved', saved)
+    } else {
+      emit('saved', saved)
+      emit('update:open', false)
+    }
   } catch (error) {
     if (error instanceof ApiError) {
       // 有字段级错误时显示到对应表单项；没有时什么都不用做（request 已经弹过全局提示）
@@ -200,6 +235,19 @@ async function onSubmit(): Promise<void> {
         </a-row>
       </template>
     </a-form>
+
+    <a-tabs v-if="formTabs.length > 0" class="sub-tabs">
+      <a-tab-pane v-for="tab in formTabs" :key="tab.field" :tab="tab.title">
+        <a-alert v-if="currentRecordId == null" message="先保存，再添加明细" type="info" show-icon />
+        <ModelTable
+          v-else
+          :model="tab.childModel"
+          :fixed-filters="tabFixedFilters(tab)"
+          :hidden-columns="[tab.mappedBy]"
+          :preset-values="tabPresetValues(tab)"
+        />
+      </a-tab-pane>
+    </a-tabs>
 
     <template #footer>
       <a-space>
