@@ -3,12 +3,13 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 
-import { dataApi } from '@/api/data'
+import { callService, dataApi } from '@/api/data'
 import { useModelStore } from '@/stores/model'
 import { SYSTEM_FIELD_TITLES, displayValue } from '@/components/fields/display'
 import ModelForm from '@/components/ModelForm.vue'
+import ManyToOneField from '@/components/fields/ManyToOneField.vue'
 import type { DataRecord, Filter } from '@/types/api'
-import type { FieldDef, ModelDef, SortItem } from '@/types/meta'
+import type { FieldDef, ModelDef, ServiceDef, SortItem } from '@/types/meta'
 
 const props = defineProps<{
   /** 模型名 */
@@ -48,6 +49,11 @@ function fieldType(name: string): string | undefined {
   return fieldByName(name)?.type
 }
 
+/** 取字段定义（调用方已确认字段存在，这里做非空断言方便传参） */
+function fieldOf(name: string): FieldDef {
+  return fieldByName(name) as FieldDef
+}
+
 const fieldNames = computed(() => new Set(modelDef.value?.fields.map((f) => f.name) ?? []))
 
 /** 列表要显示的列：views.list.columns 去掉 hiddenColumns 和无效字段 */
@@ -58,13 +64,12 @@ const listColumns = computed(() => {
   )
 })
 
-/** 搜索区要显示的字段：去掉 hiddenColumns，以及 manyToOne（本任务先跳过） */
+/** 搜索区要显示的字段：去掉 hiddenColumns */
 const searchFieldNames = computed(() => {
   const hidden = new Set(props.hiddenColumns ?? [])
   return (modelDef.value?.views.list.searchFields ?? []).filter((name) => {
     if (hidden.has(name)) return false
-    const field = fieldByName(name)
-    return !!field && field.type !== 'manyToOne'
+    return !!fieldByName(name)
   })
 })
 
@@ -88,7 +93,7 @@ const tableColumns = computed<TableColumnsType>(() => {
     key: name,
     sorter: sortable(name),
   }))
-  cols.push({ title: '操作', key: 'actions', width: 140 })
+  cols.push({ title: '操作', key: 'actions', width: 240 })
   return cols
 })
 
@@ -134,6 +139,12 @@ function buildFilters(): Filter[] {
             value: field.type === 'datetime' ? `${end} 23:59:59` : end,
           })
         }
+        break
+      }
+      case 'manyToOne': {
+        // 值可能是 { id, label }，也可能是纯 id，统一取 id 再比较
+        const id = value && typeof value === 'object' ? (value as { id: unknown }).id : value
+        filters.push({ field: name, op: 'eq', value: id })
         break
       }
     }
@@ -260,90 +271,174 @@ async function onDelete(record: DataRecord): Promise<void> {
   }
 }
 
+// ---------- 服务按钮 ----------
+
+/** trigger 为 manual 且未禁用的服务 */
+const manualServices = computed(() =>
+  (modelDef.value?.services ?? []).filter((s) => s.trigger === 'manual' && s.enabled !== false),
+)
+
+/** scope 为 model 的服务，显示成工具栏按钮 */
+const modelScopeServices = computed(() => manualServices.value.filter((s) => s.scope === 'model'))
+/** scope 为 record（或没填）的服务，显示成每行操作列里的按钮 */
+const recordScopeServices = computed(() => manualServices.value.filter((s) => s.scope !== 'model'))
+
+const serviceLoadingName = ref('')
+const serviceResultOpen = ref(false)
+const serviceResult = ref<{ title: string; value: unknown } | null>(null)
+
+const serviceValueText = computed(() => {
+  const v = serviceResult.value?.value
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string' || typeof v === 'number') return String(v)
+  return JSON.stringify(v, null, 2)
+})
+
+const serviceValueIsPrimitive = computed(() => {
+  const v = serviceResult.value?.value
+  return v !== null && v !== undefined && (typeof v === 'string' || typeof v === 'number')
+})
+
+async function runService(service: ServiceDef, record?: DataRecord): Promise<void> {
+  serviceLoadingName.value = service.name
+  try {
+    const body = record ? { id: record.id as number } : {}
+    const value = await callService(props.model, service.name, body)
+    serviceResult.value = { title: service.displayName, value }
+    serviceResultOpen.value = true
+  } catch {
+    // 失败提示由 request.ts 弹
+  } finally {
+    serviceLoadingName.value = ''
+  }
+}
+
+async function copyServiceResult(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(serviceValueText.value)
+    message.success('已复制')
+  } catch {
+    message.info('复制失败，请手动复制')
+  }
+}
+
+// 关闭结果弹窗后刷新列表
+watch(serviceResultOpen, (open) => {
+  if (!open) load()
+})
+
 defineExpose({ reload: load })
 </script>
 
 <template>
   <div class="model-table">
-    <a-form v-if="hasSearch" layout="inline" class="search-bar">
-      <a-form-item v-for="name in searchFieldNames" :key="name" :label="columnTitle(name)">
-        <a-input
-          v-if="fieldType(name) === 'string' || fieldType(name) === 'text'"
-          v-model:value="searchValues[name]"
-          allow-clear
-          placeholder="请输入"
-          style="width: 160px"
-        />
-        <a-select
-          v-else-if="fieldType(name) === 'enum'"
-          v-model:value="searchValues[name]"
-          allow-clear
-          placeholder="请选择"
-          style="width: 160px"
-        >
-          <a-select-option v-for="opt in enumOptions(name)" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </a-select-option>
-        </a-select>
-        <a-select
-          v-else-if="fieldType(name) === 'boolean'"
-          v-model:value="searchValues[name]"
-          allow-clear
-          placeholder="请选择"
-          style="width: 120px"
-        >
-          <a-select-option :value="true">是</a-select-option>
-          <a-select-option :value="false">否</a-select-option>
-        </a-select>
-        <a-input-number
-          v-else-if="fieldType(name) === 'integer' || fieldType(name) === 'decimal'"
-          v-model:value="searchValues[name]"
-          style="width: 140px"
-        />
-        <a-range-picker
-          v-else-if="fieldType(name) === 'date' || fieldType(name) === 'datetime'"
-          v-model:value="searchValues[name]"
-          value-format="YYYY-MM-DD"
-        />
-      </a-form-item>
-      <a-form-item>
-        <a-button type="primary" @click="onSearch">查询</a-button>
-        <a-button class="reset-btn" @click="onReset">重置</a-button>
-      </a-form-item>
-    </a-form>
+    <a-card v-if="hasSearch" class="search-card">
+      <a-form layout="inline">
+        <a-form-item v-for="name in searchFieldNames" :key="name" :label="columnTitle(name)">
+          <a-input
+            v-if="fieldType(name) === 'string' || fieldType(name) === 'text'"
+            v-model:value="searchValues[name]"
+            allow-clear
+            placeholder="请输入"
+            style="width: 160px"
+          />
+          <a-select
+            v-else-if="fieldType(name) === 'enum'"
+            v-model:value="searchValues[name]"
+            allow-clear
+            placeholder="请选择"
+            style="width: 160px"
+          >
+            <a-select-option v-for="opt in enumOptions(name)" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </a-select-option>
+          </a-select>
+          <a-select
+            v-else-if="fieldType(name) === 'boolean'"
+            v-model:value="searchValues[name]"
+            allow-clear
+            placeholder="请选择"
+            style="width: 120px"
+          >
+            <a-select-option :value="true">是</a-select-option>
+            <a-select-option :value="false">否</a-select-option>
+          </a-select>
+          <a-input-number
+            v-else-if="fieldType(name) === 'integer' || fieldType(name) === 'decimal'"
+            v-model:value="searchValues[name]"
+            style="width: 140px"
+          />
+          <a-range-picker
+            v-else-if="fieldType(name) === 'date' || fieldType(name) === 'datetime'"
+            v-model:value="searchValues[name]"
+            value-format="YYYY-MM-DD"
+          />
+          <ManyToOneField
+            v-else-if="fieldType(name) === 'manyToOne'"
+            :model-value="searchValues[name]"
+            :field="fieldOf(name)"
+            @update:model-value="(v: unknown) => (searchValues[name] = v)"
+          />
+        </a-form-item>
+        <a-form-item>
+          <a-button type="primary" @click="onSearch">查询</a-button>
+          <a-button class="reset-btn" @click="onReset">重置</a-button>
+        </a-form-item>
+      </a-form>
+    </a-card>
 
-    <div class="toolbar">
-      <a-button type="primary" @click="onCreate">新增</a-button>
-    </div>
+    <a-card class="table-card">
+      <div class="toolbar">
+        <a-button
+          v-for="service in modelScopeServices"
+          :key="service.name"
+          :loading="serviceLoadingName === service.name"
+          @click="runService(service)"
+        >
+          {{ service.displayName }}
+        </a-button>
+        <a-button type="primary" @click="onCreate">新增</a-button>
+      </div>
 
-    <a-table
-      :columns="tableColumns"
-      :data-source="records"
-      :loading="loading"
-      :pagination="paginationConfig"
-      row-key="id"
-      @change="onTableChange"
-    >
-      <template #bodyCell="{ column, record, text }">
-        <template v-if="column.key === 'actions'">
-          <a-button type="link" size="small" @click="onEdit(record)">编辑</a-button>
-          <a-popconfirm title="确定删除这条记录吗？" @confirm="onDelete(record)">
-            <a-button type="link" size="small" danger>删除</a-button>
-          </a-popconfirm>
-        </template>
-        <template v-else-if="fieldType(String(column.key)) === 'enum'">
-          <a-tag>{{ displayValue(fieldByName(String(column.key)), text) }}</a-tag>
-        </template>
-        <template v-else-if="fieldType(String(column.key)) === 'boolean'">
-          <a-tag :color="text ? 'green' : undefined">
+      <a-table
+        :columns="tableColumns"
+        :data-source="records"
+        :loading="loading"
+        :pagination="paginationConfig"
+        row-key="id"
+        @change="onTableChange"
+      >
+        <template #bodyCell="{ column, record, text }">
+          <template v-if="column.key === 'actions'">
+            <a-button
+              v-for="service in recordScopeServices"
+              :key="service.name"
+              type="link"
+              size="small"
+              :loading="serviceLoadingName === service.name"
+              @click="runService(service, record)"
+            >
+              {{ service.displayName }}
+            </a-button>
+            <a-button type="link" size="small" @click="onEdit(record)">编辑</a-button>
+            <a-popconfirm title="确定删除这条记录吗？" @confirm="onDelete(record)">
+              <a-button type="link" size="small" danger>删除</a-button>
+            </a-popconfirm>
+          </template>
+          <template v-else-if="fieldType(String(column.key)) === 'enum'">
+            <a-tag>{{ displayValue(fieldByName(String(column.key)), text) }}</a-tag>
+          </template>
+          <template v-else-if="fieldType(String(column.key)) === 'boolean'">
+            <a-tag :color="text ? 'green' : undefined">
+              {{ displayValue(fieldByName(String(column.key)), text) }}
+            </a-tag>
+          </template>
+          <template v-else>
             {{ displayValue(fieldByName(String(column.key)), text) }}
-          </a-tag>
+          </template>
         </template>
-        <template v-else>
-          {{ displayValue(fieldByName(String(column.key)), text) }}
-        </template>
-      </template>
-    </a-table>
+      </a-table>
+    </a-card>
 
     <ModelForm
       :open="formOpen"
@@ -353,21 +448,55 @@ defineExpose({ reload: load })
       @update:open="formOpen = $event"
       @saved="onSaved"
     />
+
+    <a-modal v-model:open="serviceResultOpen" :title="serviceResult?.title ?? '服务结果'" :footer="null">
+      <div v-if="serviceResult">
+        <div v-if="serviceValueIsPrimitive" class="service-result-primitive">
+          <span class="big-value">{{ serviceValueText }}</span>
+          <a-button size="small" @click="copyServiceResult">复制</a-button>
+        </div>
+        <pre v-else-if="serviceValueText" class="service-result-json">{{ serviceValueText }}</pre>
+        <div v-else>执行成功</div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <style scoped>
-.search-bar {
-  margin-bottom: 16px;
+.model-table {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .reset-btn {
   margin-left: 8px;
+}
+
+.service-result-primitive {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.big-value {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.service-result-json {
+  background: #f6f8fa;
+  padding: 12px;
+  border-radius: 4px;
+  max-height: 400px;
+  overflow: auto;
+  margin: 0;
 }
 </style>

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.metaforge.common.BizException;
 import com.metaforge.meta.MetaDefaults;
 import com.metaforge.meta.SampleMeta;
+import com.metaforge.meta.model.FieldDef;
 import com.metaforge.meta.model.ModelDef;
 import com.metaforge.meta.model.SortItem;
 import com.metaforge.schema.FieldTypeRegistry;
@@ -180,6 +181,53 @@ class SqlBuilderTest {
         assertThat(select).isEqualTo(
                 "SELECT `id`, `code`, `name`, `spec`, `launch_date`, `created_at`, `updated_at`"
                         + " FROM `md_product` WHERE `id` = :id");
+    }
+
+    // ---------- 关联：options、label 批量查询、删除引用 ----------
+
+    @Test
+    void optionsUsesWhitelistedLabelAndEscapesKeyword() {
+        ModelDef material = material();
+        FieldDef label = sql.labelField(material, "name");
+
+        SqlBuilder.OptionsSql query = sql.options(material, label, "50%_off", 20);
+
+        assertThat(query.select()).contains("`name` AS `label`", "`name` LIKE :p0", "LIMIT :limit");
+        assertThat(query.params().getValue("p0")).isEqualTo("%50\\%\\_off%");
+        assertThat(query.params().getValue("limit")).isEqualTo(20);
+    }
+
+    @Test
+    void labelFieldFallsBackToFirstStringFieldAndRejectsUnknown() {
+        ModelDef material = material();
+
+        // material 的第一个 string 字段是 code
+        assertThat(sql.labelField(material, null).name()).isEqualTo("code");
+        assertThat(sql.labelField(material, "name").name()).isEqualTo("name");
+        assertThatThrownBy(() -> sql.labelField(material, "nope"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("不是模型");
+    }
+
+    @Test
+    void labelSelectUsesOneInQuery() {
+        ModelDef material = material();
+        String select = sql.labelSelect(material, sql.labelField(material, "name"));
+
+        assertThat(select).contains("WHERE `id` IN (:ids)");
+        assertThat(select).contains("`name` AS `label`");
+    }
+
+    @Test
+    void relationExistenceAndReferenceSqlUseParametersOnly() {
+        ModelDef material = material();
+        ModelDef bom = MetaDefaults.normalize(SampleMeta.model("product_bom"));
+        FieldDef materialField = bom.findField("material");
+
+        assertThat(sql.existsById(material)).isEqualTo(
+                "SELECT COUNT(*) FROM `md_material` WHERE `id` = :id");
+        assertThat(sql.countReferences(bom, materialField)).isEqualTo(
+                "SELECT COUNT(*) FROM `md_product_bom` WHERE `material` = :id");
     }
 
     // ---------- 第二道名字检查 ----------

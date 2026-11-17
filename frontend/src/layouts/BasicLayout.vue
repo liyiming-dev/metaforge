@@ -4,7 +4,7 @@ import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { MenuProps } from 'ant-design-vue'
 import * as AntdIcons from '@ant-design/icons-vue'
-import { AppstoreOutlined, HomeOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, HomeOutlined, ToolOutlined } from '@ant-design/icons-vue'
 import { storeToRefs } from 'pinia'
 
 import { useMock } from '@/api/request'
@@ -15,7 +15,15 @@ const router = useRouter()
 const menuStore = useMenuStore()
 const { menus } = storeToRefs(menuStore)
 
-const selectedKeys = computed(() => [route.path])
+const collapsed = ref(false)
+
+const selectedKeys = computed(() => {
+  // 新建/编辑模型页也高亮"模型管理"
+  if (route.path.startsWith('/design/models')) {
+    return ['/design/models']
+  }
+  return [route.path]
+})
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
 
 // 所有分组默认展开；菜单加载完成后设一次，之后用户手动收起由 v-model:open-keys 接管
@@ -23,7 +31,7 @@ const openKeys = ref<string[]>([])
 watch(
   menus,
   (m) => {
-    openKeys.value = m.map((node) => node.key)
+    openKeys.value = [...m.map((node) => node.key), 'design']
   },
   { immediate: true },
 )
@@ -41,10 +49,33 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
 
 <template>
   <a-layout class="layout">
-    <a-layout-sider theme="light" :width="220" class="sider">
-      <div class="logo">MetaForge<span>元铸</span></div>
+    <a-layout-sider
+      v-model:collapsed="collapsed"
+      collapsible
+      theme="dark"
+      :width="220"
+      class="sider"
+    >
+      <div class="logo">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" class="logo-svg">
+          <path d="M14 2.5L25 8.5v11L14 25.5L3 19.5v-11L14 2.5z" fill="#3B5BDB" />
+          <text
+            x="14"
+            y="18.5"
+            text-anchor="middle"
+            font-size="11"
+            fill="#fff"
+            font-weight="bold"
+            font-family="sans-serif"
+          >
+            M
+          </text>
+        </svg>
+        <span v-if="!collapsed" class="logo-text">MetaForge<em>元铸</em></span>
+      </div>
       <a-menu
         mode="inline"
+        theme="dark"
         :selected-keys="selectedKeys"
         v-model:open-keys="openKeys"
         @click="onMenuClick"
@@ -59,6 +90,12 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
           <a-menu-item v-for="child in node.children" :key="child.path ?? child.key">
             {{ child.displayName }}
           </a-menu-item>
+        </a-sub-menu>
+        <a-sub-menu key="design">
+          <template #icon><ToolOutlined /></template>
+          <template #title>平台设计</template>
+          <a-menu-item key="/design/modules">模块管理</a-menu-item>
+          <a-menu-item key="/design/models">模型管理</a-menu-item>
         </a-sub-menu>
       </a-menu>
     </a-layout-sider>
@@ -81,24 +118,32 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
   min-height: 100vh;
 }
 
-.sider {
-  border-right: 1px solid #f0f0f0;
-}
-
 .logo {
   height: 56px;
-  padding: 0 24px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 18px;
-  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-.logo span {
-  font-size: 13px;
+.logo-svg {
+  flex: none;
+}
+
+.logo-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.logo-text em {
+  font-style: normal;
+  font-size: 12px;
   font-weight: 400;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.55);
+  margin-left: 4px;
 }
 
 .header {
@@ -119,5 +164,6 @@ const onMenuClick: MenuProps['onClick'] = ({ key }) => {
 
 .content {
   padding: 24px;
+  background: #f5f7fa;
 }
 </style>

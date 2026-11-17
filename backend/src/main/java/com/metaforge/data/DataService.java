@@ -58,16 +58,32 @@ public class DataService {
         SqlBuilder.SearchSql query = sql.search(model, request);
         Long total = jdbc.queryForObject(query.count(), query.params(), Long.class);
         List<Map<String, Object>> rows = jdbc.queryForList(query.select(), query.params());
-        List<Map<String, Object>> records = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            records.add(toRecord(model, row));
-        }
-        return new SearchResult(records, total == null ? 0 : total, query.page(), query.size());
+        return new SearchResult(toRecords(model, rows), total == null ? 0 : total, query.page(), query.size());
     }
 
     public Map<String, Object> get(String modelName, String id) {
         ModelDef model = registry.requireModel(modelName);
-        return toRecord(model, readRow(model, parseId(id)));
+        return toRecords(model, List.of(readRow(model, parseId(id)))).get(0);
+    }
+
+    /** 多对一下拉框的选项。按 displayField 模糊匹配，最多 limit 条。 */
+    public List<OptionItem> options(String modelName, String keyword, Integer limit, String displayField) {
+        ModelDef model = registry.requireModel(modelName);
+        int actualLimit = limit == null ? SqlBuilder.DEFAULT_OPTION_LIMIT : limit;
+        if (actualLimit < 1 || actualLimit > SqlBuilder.MAX_OPTION_LIMIT) {
+            throw BizException.badRequest("limit 必须在 1 到 " + SqlBuilder.MAX_OPTION_LIMIT + " 之间");
+        }
+        FieldDef labelField = sql.labelField(model, displayField);
+        SqlBuilder.OptionsSql query = sql.options(model, labelField, keyword, actualLimit);
+        List<OptionItem> result = new ArrayList<>();
+        for (Map<String, Object> row : jdbc.queryForList(query.select(), query.params())) {
+            Long id = asLong(row.get(SystemFields.ID));
+            if (id != null) {
+                Object label = row.get("label");
+                result.add(new OptionItem(id, label == null ? null : String.valueOf(label)));
+            }
+        }
+        return result;
     }
 
     // ---------- 新建 ----------
@@ -79,6 +95,7 @@ public class DataService {
         Map<String, Object> record = fromBody(model, body, null);
         beforeCreate(model, record);
         requireRequired(model, record);
+        validateRelations(model, record);
 
         LocalDateTime now = LocalDateTime.now();
         MapSqlParameterSource params = toParams(model, record);
@@ -112,6 +129,7 @@ public class DataService {
         Map<String, Object> record = fromBody(model, body, existing);
         beforeUpdate(model, record);
         requireRequired(model, record);
+        validateRelations(model, record);
 
         MapSqlParameterSource params = toParams(model, record);
         params.addValue(SystemFields.ID, recordId);
@@ -134,6 +152,7 @@ public class DataService {
         long recordId = parseId(id);
         Map<String, Object> record = readRow(model, recordId);
 
+        ensureNotReferenced(model, recordId);
         beforeDelete(model, record);
         int deleted = jdbc.update(sql.deleteById(model), new MapSqlParameterSource(SystemFields.ID, recordId));
         if (deleted == 0) {
@@ -220,6 +239,61 @@ public class DataService {
         }
     }
 
+    /**
+     * 多对一写入校验：每个非空的关联字段，目标记录必须存在。
+     * 没有数据库外键，所以这是应用层保证引用完整性的第一半（另一半是删除前的引用检查）。
+     */
+    private void validateRelations(ModelDef model, Map<String, Object> record) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        for (FieldDef field : model.fields()) {
+            if (!FieldTypes.MANY_TO_ONE.equals(field.type()) || field.relation() == null) {
+                continue;
+            }
+            Long targetId = asLong(record.get(field.name()));
+            if (targetId == null) {
+                continue;
+            }
+            ModelDef target = registry.findModel(field.relation().model());
+            if (target == null) {
+                errors.put(field.name(), "关联的模型 " + field.relation().model() + " 不存在");
+                continue;
+            }
+            Long count = jdbc.queryForObject(
+                    sql.existsById(target), new MapSqlParameterSource(SystemFields.ID, targetId), Long.class);
+            if (count == null || count == 0) {
+                errors.put(field.name(), "关联的「" + displayName(target) + "」记录不存在");
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new BizException(ErrorCode.BAD_REQUEST, "有关联字段填写不正确", errors);
+        }
+    }
+
+    /**
+     * 删除前的引用检查：从 MetaRegistry 找出所有指向这个模型的 manyToOne 字段，逐个查子表。
+     * 有引用就返回 409，并把“哪个模型、哪个字段、多少条”说清楚；没有数据库外键，这是另一半。
+     */
+    private void ensureNotReferenced(ModelDef model, long recordId) {
+        List<String> referrers = new ArrayList<>();
+        for (ModelDef other : registry.models()) {
+            for (FieldDef field : other.fields()) {
+                if (field == null || !FieldTypes.MANY_TO_ONE.equals(field.type())
+                        || field.relation() == null || !model.name().equals(field.relation().model())) {
+                    continue;
+                }
+                Long count = jdbc.queryForObject(
+                        sql.countReferences(other, field),
+                        new MapSqlParameterSource(SystemFields.ID, recordId), Long.class);
+                if (count != null && count > 0) {
+                    referrers.add("“" + displayName(other) + "”的“" + displayName(field) + "”字段（" + count + " 条记录）");
+                }
+            }
+        }
+        if (!referrers.isEmpty()) {
+            throw BizException.conflict("记录被 " + String.join("、", referrers) + " 引用，不能删除");
+        }
+    }
+
     // ---------- 数据库 ----------
 
     private MapSqlParameterSource toParams(ModelDef model, Map<String, Object> record) {
@@ -241,10 +315,64 @@ public class DataService {
     }
 
     private Map<String, Object> readBack(ModelDef model, long id) {
-        return toRecord(model, readRow(model, id));
+        return toRecords(model, List.of(readRow(model, id))).get(0);
     }
 
-    /** 数据库的一行 → 响应里的记录：按定义顺序排好，值换成契约规定的 JSON 形式。 */
+    /**
+     * 数据库的若干行 → 响应里的记录：先按字段类型换值，再把多对一的 id 批量换成 {id,label}。
+     *
+     * label 不在 toRecord 里逐条查，而是按“模型 + 关联字段”收集这一页的 id，一条 IN 查询取回。
+     * 一页的查询条数只跟关联字段数有关，跟记录数无关。
+     */
+    private List<Map<String, Object>> toRecords(ModelDef model, List<Map<String, Object>> rows) {
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            records.add(toRecord(model, row));
+        }
+        for (FieldDef field : model.fields()) {
+            if (!FieldTypes.MANY_TO_ONE.equals(field.type()) || field.relation() == null) {
+                continue;
+            }
+            ModelDef target = registry.findModel(field.relation().model());
+            if (target == null) {
+                // 正常保存时校验器会挡住；真遇到脏定义就保留 id，不让整页读失败
+                continue;
+            }
+            List<Long> ids = new ArrayList<>();
+            for (Map<String, Object> record : records) {
+                Long id = asLong(record.get(field.name()));
+                if (id != null && !ids.contains(id)) {
+                    ids.add(id);
+                }
+            }
+            if (ids.isEmpty()) {
+                continue;
+            }
+            FieldDef labelField = sql.labelField(target, field.relation().displayField());
+            Map<Long, String> labels = new LinkedHashMap<>();
+            for (Map<String, Object> row : jdbc.queryForList(
+                    sql.labelSelect(target, labelField), new MapSqlParameterSource("ids", ids))) {
+                Long id = asLong(row.get(SystemFields.ID));
+                if (id != null) {
+                    Object label = row.get("label");
+                    labels.put(id, label == null ? null : String.valueOf(label));
+                }
+            }
+            for (Map<String, Object> record : records) {
+                Long id = asLong(record.get(field.name()));
+                if (id == null) {
+                    continue;
+                }
+                Map<String, Object> ref = new LinkedHashMap<>();
+                ref.put(SystemFields.ID, id);
+                ref.put("label", labels.get(id));
+                record.put(field.name(), ref);
+            }
+        }
+        return records;
+    }
+
+    /** 数据库的一行 → 响应里的记录（多对一还是 id，由 toRecords 统一换成 {id,label}）。 */
     private Map<String, Object> toRecord(ModelDef model, Map<String, Object> row) {
         Map<String, Object> record = new LinkedHashMap<>();
         record.put(SystemFields.ID, row.get(SystemFields.ID));
@@ -258,6 +386,28 @@ public class DataService {
         record.put(SystemFields.UPDATED_AT,
                 values.toJson(FieldValues.systemField(SystemFields.UPDATED_AT), row.get(SystemFields.UPDATED_AT)));
         return record;
+    }
+
+    private static Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static String displayName(ModelDef model) {
+        return model.displayName() == null ? model.name() : model.displayName();
+    }
+
+    private static String displayName(FieldDef field) {
+        return field.displayName() == null ? field.name() : field.displayName();
     }
 
     /**
