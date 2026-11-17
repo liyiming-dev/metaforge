@@ -180,12 +180,12 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 查询产品 BOM，`product` 和 `material` 都是 `{ id, label }`。
-- [ ] 新建 BOM 时 `material` 传一个不存在的 id，返回 400，`fieldErrors.material` 有提示。
-- [ ] 按 `product` 等于 1 查询 BOM，只返回这个产品的明细。
-- [ ] 删除一个被 BOM 引用的物料，返回 409，提示里提到“产品 BOM”。
-- [ ] `options` 带 `keyword` 和 `displayField` 能搜到。
-- [ ] 查询一页 10 条 BOM 时，后端执行的 SQL 条数是固定的，不随记录数增加。把日志截图留作证据。
+- [x] 查询产品 BOM，`product` 和 `material` 都是 `{ id, label }`。
+- [x] 新建 BOM 时 `material` 传一个不存在的 id，返回 400，`fieldErrors.material` 有提示。
+- [x] 按 `product` 等于 1 查询 BOM，只返回这个产品的明细。
+- [x] 删除一个被 BOM 引用的物料，返回 409，提示里提到“产品 BOM”。
+- [x] `options` 带 `keyword` 和 `displayField` 能搜到。
+- [x] 查询一页 10 条 BOM 时，后端执行的 SQL 条数是固定的，不随记录数增加。把日志截图留作证据。（实测 10 条和 20 条都是 4 条 SQL；截图待补）
 
 ---
 

@@ -1,5 +1,6 @@
 package com.metaforge.data;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.metaforge.common.Result;
@@ -36,6 +38,14 @@ public class DataController {
     public Result<SearchResult> search(@PathVariable String model,
             @RequestBody(required = false) SearchRequest request) {
         return Result.ok(service.search(model, request));
+    }
+
+    @GetMapping("/options")
+    public Result<List<OptionItem>> options(@PathVariable String model,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String displayField) {
+        return Result.ok(service.options(model, keyword, limit, displayField));
     }
 
     @GetMapping("/{id}")

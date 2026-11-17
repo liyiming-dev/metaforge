@@ -54,7 +54,7 @@ public final class ManyToOneType implements FieldTypeHandler {
         if (value instanceof BigDecimal decimal) {
             return decimal.longValue();
         }
-        // 任务 B4 会在这里把 id 换成 { "id": 3, "label": "螺丝 M3" }
+        // 这里只返回 id；DataService 会把一页里的 id 收集起来批量取 label，再换成 {id,label}
         return value;
     }
 }
