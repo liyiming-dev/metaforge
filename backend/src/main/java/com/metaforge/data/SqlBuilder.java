@@ -38,6 +38,10 @@ public class SqlBuilder {
     public static final int DEFAULT_PAGE_SIZE = 10;
     /** 一页最多取这么多条，防止一次把整张表拉下来 */
     public static final int MAX_PAGE_SIZE = 200;
+    /** 下拉框默认取这么多项，和契约里的 options 一致 */
+    public static final int DEFAULT_OPTION_LIMIT = 20;
+    /** 下拉框一次最多取这么多项，防止前端传一个很大的 limit */
+    public static final int MAX_OPTION_LIMIT = 100;
 
     /** 能拼进 SQL 的名字只能是这个样子 */
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-z][a-z0-9_]*$");
@@ -62,6 +66,10 @@ public class SqlBuilder {
 
     /** 一次查询要发两条 SQL（取一页、取总数）和它们的参数，以及实际用的页码和每页条数。 */
     public record SearchSql(String select, String count, MapSqlParameterSource params, int page, int size) {
+    }
+
+    /** options 查询的 SQL 和参数。 */
+    public record OptionsSql(String select, MapSqlParameterSource params) {
     }
 
     // ---------- 查询 ----------
@@ -98,6 +106,63 @@ public class SqlBuilder {
     public String selectById(ModelDef model) {
         return "SELECT " + quoteAll(allColumns(model)) + " FROM " + quote(model.tableName())
                 + " WHERE " + quote(SystemFields.ID) + " = :" + SystemFields.ID;
+    }
+
+    // ---------- 关联和多对一下拉框 ----------
+
+    /**
+     * 多对一显示字段的解析和校验。先看请求里指定的 displayField，再退回目标模型第一个 string 字段。
+     * displayField 必须是目标模型里占列的字段（B1 保存模型时也按这个规则校验）；
+     * 没有指定时按契约用第一个 string 字段。
+     */
+    public FieldDef labelField(ModelDef model, String displayField) {
+        if (displayField != null && !displayField.isBlank()) {
+            FieldDef field = model.findField(displayField);
+            if (field == null || !FieldTypes.hasColumn(field.type())) {
+                throw BizException.badRequest("显示字段 " + displayField + " 不是模型 " + model.name() + " 的字段");
+            }
+            return field;
+        }
+        for (FieldDef field : model.fields()) {
+            if (field != null && FieldTypes.STRING.equals(field.type())) {
+                return field;
+            }
+        }
+        throw BizException.badRequest("模型 " + model.name() + " 没有 string 类型字段，不能作为显示字段");
+    }
+
+    /** 下拉框查询：按显示字段模糊匹配，最多取 limit 条。keyword 里的 % 和 _ 按普通字符处理。 */
+    public OptionsSql options(ModelDef model, FieldDef labelField, String keyword, int limit) {
+        Bind bind = new Bind();
+        String column = quote(labelField.name());
+        String where = "";
+        if (keyword != null && !keyword.isBlank()) {
+            where = " WHERE " + column + " LIKE " + bind.add("%" + escapeLike(keyword.trim()) + "%");
+        }
+        bind.params.addValue("limit", limit);
+        String select = "SELECT " + quote(SystemFields.ID) + ", " + column + " AS `label`"
+                + " FROM " + quote(model.tableName()) + where
+                + " ORDER BY " + column + " ASC LIMIT :limit";
+        return new OptionsSql(select, bind.params);
+    }
+
+    /** 一页记录里同一个关联字段的 id 收集好后，用一条 IN 查询取回 id 和 label。 */
+    public String labelSelect(ModelDef model, FieldDef labelField) {
+        return "SELECT " + quote(SystemFields.ID) + ", " + quote(labelField.name()) + " AS `label`"
+                + " FROM " + quote(model.tableName())
+                + " WHERE " + quote(SystemFields.ID) + " IN (:ids)";
+    }
+
+    /** 多对一写入前检查目标记录是否存在。 */
+    public String existsById(ModelDef model) {
+        return "SELECT COUNT(*) FROM " + quote(model.tableName())
+                + " WHERE " + quote(SystemFields.ID) + " = :" + SystemFields.ID;
+    }
+
+    /** 删除记录前，检查某个子表里有多少条记录通过 field 指向它。 */
+    public String countReferences(ModelDef child, FieldDef field) {
+        return "SELECT COUNT(*) FROM " + quote(child.tableName())
+                + " WHERE " + quote(field.name()) + " = :" + SystemFields.ID;
     }
 
     // ---------- 写入 ----------
