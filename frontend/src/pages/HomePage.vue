@@ -49,9 +49,8 @@ async function loadStats(): Promise<void> {
 
 onMounted(() => {
   checkBackend()
-  if (useMock) {
-    loadStats()
-  }
+  // 真实后端和 mock 都要加载统计：/api/meta/modules、/api/meta/models 在 B1 已经可用
+  loadStats()
 })
 
 function goModel(model: ModelDef): void {
