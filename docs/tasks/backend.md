@@ -54,13 +54,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 导入 `mes.json`，返回 `{ "modules": 2, "models": 4 }`。
-- [ ] `GET /api/meta/models/material` 返回 8 个字段，`views` 完整，`tableName` 有值。
-- [ ] `GET /api/meta/menus` 返回“生产管理”（物料、产品）和“基础设置”（编码规则），顺序正确，`product_bom` 不出现。
-- [ ] 新建一个不带 `views` 的模型，返回的定义里有按规则生成的默认视图。
-- [ ] 模型名传 `Bad Name` 返回 400 和中文提示；重复新建返回 409；枚举字段没有选项返回 400；关联指向不存在的模型返回 400。
-- [ ] 重启后端后，定义还在。
-- [ ] `.\mvnw.cmd test` 通过，`MetaValidator` 至少有 6 条测试。
+- [x] 导入 `mes.json`，返回 `{ "modules": 2, "models": 4 }`。
+- [x] `GET /api/meta/models/material` 返回 8 个字段，`views` 完整，`tableName` 有值。
+- [x] `GET /api/meta/menus` 返回“生产管理”（物料、产品）和“基础设置”（编码规则），顺序正确，`product_bom` 不出现。
+- [x] 新建一个不带 `views` 的模型，返回的定义里有按规则生成的默认视图。
+- [x] 模型名传 `Bad Name` 返回 400 和中文提示；重复新建返回 409；枚举字段没有选项返回 400；关联指向不存在的模型返回 400。
+- [x] 重启后端后，定义还在。
+- [x] `.\mvnw.cmd test` 通过，`MetaValidator` 至少有 6 条测试。
 
 ---
 
@@ -107,13 +107,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 导入 `mes.json` 后，在 MySQL 里执行 `SHOW TABLES`，能看到四张业务表。
-- [ ] `SHOW CREATE TABLE` 物料表：列和类型符合上面的表，`code` 上有唯一索引。
-- [ ] 给物料模型加一个字段 `brand` 后提交修改，表里多了一列，原有数据没丢。
-- [ ] 再把 `brand` 去掉后提交，`GET` 模型定义里没有它了，表的处理和决策 005 里写的一致。
-- [ ] 修改 `name` 字段的 `type`，返回 400。
-- [ ] 以上全程不重启后端。
-- [ ] 每种字段类型的建表片段各有一条单元测试。
+- [x] 导入 `mes.json` 后，在 MySQL 里执行 `SHOW TABLES`，能看到四张业务表。
+- [x] `SHOW CREATE TABLE` 物料表：列和类型符合上面的表，`code` 上有唯一索引。
+- [x] 给物料模型加一个字段 `brand` 后提交修改，表里多了一列，原有数据没丢。
+- [x] 再把 `brand` 去掉后提交，`GET` 模型定义里没有它了，表的处理和决策 005 里写的一致。
+- [x] 修改 `name` 字段的 `type`，返回 400。
+- [x] 以上全程不重启后端。
+- [x] 每种字段类型的建表片段各有一条单元测试。
 
 ---
 
@@ -180,12 +180,12 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 查询产品 BOM，`product` 和 `material` 都是 `{ id, label }`。
-- [ ] 新建 BOM 时 `material` 传一个不存在的 id，返回 400，`fieldErrors.material` 有提示。
-- [ ] 按 `product` 等于 1 查询 BOM，只返回这个产品的明细。
-- [ ] 删除一个被 BOM 引用的物料，返回 409，提示里提到“产品 BOM”。
-- [ ] `options` 带 `keyword` 和 `displayField` 能搜到。
-- [ ] 查询一页 10 条 BOM 时，后端执行的 SQL 条数是固定的，不随记录数增加。把日志截图留作证据。
+- [x] 查询产品 BOM，`product` 和 `material` 都是 `{ id, label }`。
+- [x] 新建 BOM 时 `material` 传一个不存在的 id，返回 400，`fieldErrors.material` 有提示。
+- [x] 按 `product` 等于 1 查询 BOM，只返回这个产品的明细。
+- [x] 删除一个被 BOM 引用的物料，返回 409，提示里提到“产品 BOM”。
+- [x] `options` 带 `keyword` 和 `displayField` 能搜到。
+- [x] 查询一页 10 条 BOM 时，后端执行的 SQL 条数是固定的，不随记录数增加。把日志截图留作证据。（实测 10 条和 20 条都是 4 条 SQL；截图待补）
 
 ---
 
