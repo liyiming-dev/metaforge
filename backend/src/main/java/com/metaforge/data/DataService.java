@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -21,7 +22,9 @@ import com.metaforge.meta.MetaRegistry;
 import com.metaforge.meta.model.FieldDef;
 import com.metaforge.meta.model.FieldTypes;
 import com.metaforge.meta.model.ModelDef;
+import com.metaforge.meta.model.ServiceTriggers;
 import com.metaforge.meta.model.SystemFields;
+import com.metaforge.svc.ServiceRunner;
 
 /**
  * 数据接口的业务逻辑：/api/data/{model} 的查询、详情、新建、修改、删除，对任意模型都可用。
@@ -29,8 +32,8 @@ import com.metaforge.meta.model.SystemFields;
  *
  * 新建、修改、删除都写成同一个固定流程（模板方法）：
  * 前置钩子 → 校验 → 写库 → 后置钩子 → 读回。
- * 钩子现在是空方法，任务 B5 会把脚本服务接进去；到时候只要往这几个方法里填执行脚本的代码，
- * 流程本身不用动，也不会出现“某个接口忘了调钩子”的情况。
+ * B5 起，钩子由 ServiceRunner 执行模型上对应 trigger 的脚本；流程本身不动，
+ * 也不会出现“某个接口忘了调钩子”的情况。
  *
  * 写操作加事务：钩子、写库、读回要一起成功或一起失败。
  * 这里用 @Transactional 而不是 MetaService 里的 TransactionTemplate，因为那边只有中间一段在事务里
@@ -43,12 +46,16 @@ public class DataService {
     private final SqlBuilder sql;
     private final FieldValues values;
     private final NamedParameterJdbcTemplate jdbc;
+    /** 用 ObjectProvider 打破 DataService ↔ ServiceRunner 的构造循环；真正执行时才取。 */
+    private final ObjectProvider<ServiceRunner> services;
 
-    public DataService(MetaRegistry registry, SqlBuilder sql, FieldValues values, NamedParameterJdbcTemplate jdbc) {
+    public DataService(MetaRegistry registry, SqlBuilder sql, FieldValues values, NamedParameterJdbcTemplate jdbc,
+            ObjectProvider<ServiceRunner> services) {
         this.registry = registry;
         this.sql = sql;
         this.values = values;
         this.jdbc = jdbc;
+        this.services = services;
     }
 
     // ---------- 查询 ----------
@@ -114,6 +121,8 @@ public class DataService {
         }
         long id = key.longValue();
 
+        // 后置钩子能看到 id；toParams 只取业务字段，不会把这个临时 id 写回去
+        record.put(SystemFields.ID, id);
         afterCreate(model, record, id);
         return readBack(model, id);
     }
@@ -122,12 +131,25 @@ public class DataService {
 
     @Transactional
     public Map<String, Object> update(String modelName, String id, Map<String, Object> body) {
+        return updateInternal(modelName, id, body, true);
+    }
+
+    /** 脚本里的 db.update：校验和普通修改一样，但不触发目标模型的钩子，避免递归。 */
+    @Transactional
+    public Map<String, Object> updateForScript(String modelName, Long id, Map<String, Object> body) {
+        return updateInternal(modelName, String.valueOf(id), body, false);
+    }
+
+    private Map<String, Object> updateInternal(String modelName, String id, Map<String, Object> body,
+            boolean runHooks) {
         ModelDef model = registry.requireModel(modelName);
         long recordId = parseId(id);
         Map<String, Object> existing = readRow(model, recordId);
 
         Map<String, Object> record = fromBody(model, body, existing);
-        beforeUpdate(model, record);
+        if (runHooks) {
+            beforeUpdate(model, record);
+        }
         requireRequired(model, record);
         validateRelations(model, record);
 
@@ -140,7 +162,10 @@ public class DataService {
             throw duplicateKey(model, e);
         }
 
-        afterUpdate(model, record, recordId);
+        if (runHooks) {
+            record.put(SystemFields.ID, recordId);
+            afterUpdate(model, record, recordId);
+        }
         return readBack(model, recordId);
     }
 
@@ -158,6 +183,56 @@ public class DataService {
         if (deleted == 0) {
             throw BizException.notFound("记录不存在");
         }
+    }
+
+    // ---------- 脚本的受控数据访问 ----------
+
+    /** db.get：读不到返回 null，模型不存在仍然 404。 */
+    public Map<String, Object> getForScript(String modelName, Long id) {
+        ModelDef model = registry.requireModel(modelName);
+        if (id == null) {
+            throw BizException.badRequest("db.get 的记录 id 不能为空");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                sql.selectById(model), new MapSqlParameterSource(SystemFields.ID, id));
+        if (rows.isEmpty()) {
+            return null;
+        }
+        return toRecords(model, rows).get(0);
+    }
+
+    /** db.find：按一个字段的精确值找第一条，找不到返回 null。 */
+    public Map<String, Object> findForScript(String modelName, String field, Object value) {
+        registry.requireModel(modelName);
+        SearchResult result = search(modelName,
+                new SearchRequest(1, 1, List.of(new SearchRequest.Filter(field, "eq", value)), null));
+        return result.records().isEmpty() ? null : result.records().get(0);
+    }
+
+    /**
+     * db.increment：原子地把整数字段加 1 并读回。
+     * UPDATE 先拿行锁，再在同一个事务里 SELECT，所以并发调用不会拿到重复流水号。
+     */
+    @Transactional
+    public long incrementForScript(String modelName, Long id, String fieldName) {
+        ModelDef model = registry.requireModel(modelName);
+        if (id == null) {
+            throw BizException.badRequest("db.increment 的记录 id 不能为空");
+        }
+        FieldDef field = model.findField(fieldName);
+        if (field == null || !FieldTypes.INTEGER.equals(field.type())) {
+            throw BizException.badRequest("字段 " + fieldName + " 不是模型 " + modelName + " 的整数字段");
+        }
+        int updated = jdbc.update(sql.increment(model, field),
+                new MapSqlParameterSource(SystemFields.ID, id));
+        if (updated == 0) {
+            throw BizException.notFound("记录不存在");
+        }
+        Object value = readRow(model, id).get(field.name());
+        if (!(value instanceof Number number)) {
+            throw BizException.badRequest("字段 " + fieldName + " 的值不是数字");
+        }
+        return number.longValue();
     }
 
     // ---------- 校验 ----------
@@ -443,25 +518,30 @@ public class DataService {
         return field != null && FieldTypes.hasColumn(field.type());
     }
 
-    // ---------- 钩子（任务 B5 接脚本） ----------
+    // ---------- 钩子（B5 执行脚本服务） ----------
 
     /** 新建之前。脚本可以修改将要保存的 record。 */
     private void beforeCreate(ModelDef model, Map<String, Object> record) {
+        services.getObject().runHooks(model, ServiceTriggers.BEFORE_CREATE, record, Map.of());
     }
 
     /** 新建之后。记录已经在数据库里，参数是它的 id。 */
     private void afterCreate(ModelDef model, Map<String, Object> record, long id) {
+        services.getObject().runHooks(model, ServiceTriggers.AFTER_CREATE, record, Map.of());
     }
 
     /** 修改之前。 */
     private void beforeUpdate(ModelDef model, Map<String, Object> record) {
+        services.getObject().runHooks(model, ServiceTriggers.BEFORE_UPDATE, record, Map.of());
     }
 
     /** 修改之后。 */
     private void afterUpdate(ModelDef model, Map<String, Object> record, long id) {
+        services.getObject().runHooks(model, ServiceTriggers.AFTER_UPDATE, record, Map.of());
     }
 
     /** 删除之前。脚本抛错就能阻止删除。 */
     private void beforeDelete(ModelDef model, Map<String, Object> record) {
+        services.getObject().runHooks(model, ServiceTriggers.BEFORE_DELETE, record, Map.of());
     }
 }

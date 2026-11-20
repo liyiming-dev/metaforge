@@ -37,6 +37,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- B5 脚本服务：AviatorScript，决策 006；选它是因为体积小、sandbox 和执行超时是内置的 -->
+        <dependency>
+            <groupId>com.googlecode.aviator</groupId>
+            <artifactId>aviator</artifactId>
+            <version>5.4.4</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>

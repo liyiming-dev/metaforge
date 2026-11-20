@@ -63,6 +63,16 @@ class RelationApiTest {
 
     private void importSample() throws Exception {
         send(post("/api/meta/import"), sampleJson).andExpect(status().isOk());
+        // B5：物料/产品的 beforeCreate 脚本会找对应编码规则；测试里先把两条规则建好
+        seedCodeRule("material", "MAT-");
+        seedCodeRule("product", "PROD-");
+    }
+
+    private void seedCodeRule(String name, String prefix) throws Exception {
+        send(post("/api/data/code_rule"),
+                "{\"name\":\"" + name + "\",\"prefix\":\"" + prefix
+                        + "\",\"date_format\":\"yyyyMMdd\",\"serial_digits\":4}")
+                .andExpect(status().isOk());
     }
 
     private long create(String model, String body) throws Exception {
