@@ -1,0 +1,9 @@
+// 决策 006 试做（推荐形态）：AviatorScript 5.4.4，受控 db 函数，sandbox 下可用
+// B5 把 db.get / db.increment / db.today 注册成 Aviator 函数，脚本只看到这三个受控方法。
+let rule = db.get("code_rule", params.ruleId);
+let serial = db.increment("code_rule", rule.id, "current_serial");
+let digits = "" + serial;
+while (string.length(digits) < rule.serial_digits) {
+  digits = "0" + digits;
+}
+return rule.prefix + db.today(rule.date_format) + digits;
