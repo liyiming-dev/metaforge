@@ -1,0 +1,10 @@
+// 决策 006 试做：AviatorScript 5.4.4，生成编码
+// 试做时启用了 JavaMethodReflectionFunctionMissing，把 get(db, ...) 反射成 db.get(...)。
+// 注意：Aviator 的 sandbox 模式会禁止这条反射路径；B5 如果选 Aviator，要把 db 的方法注册成受控函数。
+let rule = get(db, "code_rule", params.ruleId);
+let serial = increment(db, "code_rule", rule.id, "current_serial");
+let digits = "" + serial;
+while (string.length(digits) < rule.serial_digits) {
+  digits = "0" + digits;
+}
+return rule.prefix + today(db, rule.date_format) + digits;
