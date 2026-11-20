@@ -150,9 +150,12 @@
 |---|---|---|
 | `db.get(model, id)` | map 或 `nil` | 按 id 读一条记录 |
 | `db.find(model, field, value)` | map 或 `nil` | 按一个字段的精确值找第一条记录；`field` 必须是该模型已定义的字段 |
+| `db.update(model, id, values)` | map | 按 id 修改一条记录，返回修改后的记录；`values` 是字段名到新值的 map，字段校验、必填、关联校验和普通修改接口一致 |
 | `db.increment(model, id, field)` | number | 把整数字段原子加 1，返回加完后的值。并发生成编码必须用它，不能先查再写 |
 | `db.today(pattern)` | string | 按 Java 日期格式返回服务器当天日期，例如 `db.today("yyyyMMdd")` |
 | `db.call(model, service, id, params)` | 任意 JSON 值 | 调用另一个 `manual` 服务的脚本，返回它的返回值；`id` 和 `params` 可以传 `nil`，只传三个参数时等价于 `params` 为 `{}` |
+
+`db.update` 和 `db.increment` 不触发目标模型的 `beforeUpdate`/`afterUpdate` 钩子，避免脚本里的写操作递归触发同一钩子；普通的 `/api/data` 修改接口仍然会触发钩子。
 
 `db.call` 只能调用 `manual` 服务，调用链不能形成环；后端检测到递归会报错。服务调用和当前操作在同一个事务里，被调服务出错时整个操作回滚。
 
