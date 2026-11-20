@@ -174,7 +174,7 @@ export const mesBundle: MetaBundle = {
           displayName: '生成编码',
           trigger: 'manual',
           scope: 'record',
-          script: 'let serial = db.increment("code_rule", record.id, "current_serial");\nlet digits = "" + serial;\nwhile (string.length(digits) < record.serial_digits) {\n  digits = "0" + digits;\n}\nreturn record.prefix + db.today(record.date_format) + digits;',
+          script: 'let serial = db.increment("code_rule", record.id, "current_serial");\nlet date = "";\nif (record.date_format != "none") {\n  date = db.today(record.date_format) + "-";\n}\nlet digits = "" + serial;\nwhile (string.length(digits) < record.serial_digits) {\n  digits = "0" + digits;\n}\nreturn record.prefix + date + digits;',
         },
       ],
       views: {
