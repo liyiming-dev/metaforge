@@ -224,7 +224,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 - [x] 修改脚本后不重启，下一次调用就是新逻辑。
 - [x] 契约文档已经补上脚本说明。
 
-**实现说明（2026-11-20）：** 选 AviatorScript 5.4.4 + 受控 `db` 函数，见决策 006 和契约 PR #25/#27/#29。`ServiceApiTest` 覆盖编码连续、自动填编码、显式编码优先、非 manual 404、脚本错误回滚、热更新、`db.update`、`beforeDelete` 阻止删除和 20 并发；全量 117 个测试通过。真实 MySQL 9.6.0 上验证了 `MAT-20261120-0024` 这类格式、20 并发 20 个唯一编码；测试类留在 `backend/src/test/java/com/metaforge/svc/ServiceApiTest.java`。
+**实现说明（2026-11-20）：** 选 AviatorScript 5.4.4 + 受控 `db` 函数，见决策 006 和契约 PR #25/#27/#29。`ServiceApiTest` 覆盖编码连续、自动填编码、显式编码优先、非 manual 404、脚本错误回滚、热更新、`db.get`、`db.update`、`beforeDelete` 阻止删除和 20 并发；全量 118 个测试通过。真实 MySQL 9.6.0 上验证了 `MAT-20261120-0024` 这类格式、20 并发 20 个唯一编码；测试类留在 `backend/src/test/java/com/metaforge/svc/ServiceApiTest.java`。
 
 ---
 

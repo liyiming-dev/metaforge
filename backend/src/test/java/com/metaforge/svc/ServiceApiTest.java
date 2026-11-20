@@ -201,6 +201,30 @@ class ServiceApiTest {
     }
 
     @Test
+    void scriptCanReadById() throws Exception {
+        importSample();
+        long rule = create("code_rule",
+                "{\"name\":\"lookup\",\"prefix\":\"L-\",\"date_format\":\"none\",\"serial_digits\":4}");
+        send(post("/api/meta/models"), """
+                {
+                  "name": "lookup_script",
+                  "displayName": "读取脚本",
+                  "module": "mes",
+                  "fields": [{"name":"name","displayName":"名称","type":"string"}],
+                  "services": [{"name":"lookup","displayName":"读取","trigger":"manual","scope":"model",
+                    "script":"let row = db.get(\\"code_rule\\", params.id); if (row == nil) { return \\"nil\\"; } return row.name;"}]
+                }
+                """).andExpect(status().isOk());
+
+        String response = mvc.perform(post("/api/svc/lookup_script/lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"params\":{\"id\":" + rule + "}}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(SampleMeta.JSON.readTree(response).get("data").asText()).isEqualTo("lookup");
+    }
+
+    @Test
     void scriptCanUpdateThroughControlledDb() throws Exception {
         importSample();
         send(post("/api/meta/models"), """
