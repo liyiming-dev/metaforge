@@ -169,12 +169,18 @@
 
 ```javascript
 let serial = db.increment("code_rule", record.id, "current_serial");
+let date = "";
+if (record.date_format != "none") {
+  date = db.today(record.date_format) + "-";
+}
 let digits = "" + serial;
 while (string.length(digits) < record.serial_digits) {
   digits = "0" + digits;
 }
-return record.prefix + db.today(record.date_format) + digits;
+return record.prefix + date + digits;
 ```
+
+日期格式为 `none` 时 `date` 为空，返回“前缀 + 流水号”；否则返回“前缀 + 日期 + `-` + 流水号”，例如 `MAT-20261115-0001`。
 
 物料和产品的新建钩子见 `samples/mes.json`：用 `db.find` 找到对应编码规则，再用 `db.call` 调它的 `generate`，把返回值填进 `record.code`。
 
