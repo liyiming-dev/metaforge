@@ -247,10 +247,12 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 全程不重启：新建模型 → 菜单接口里出现 → 数据接口可用 → 给模型加字段 → 新字段立刻可读写。
-- [ ] 把 `export` 的结果原样 `import` 回去，所有模型不变。
-- [ ] 导入一个第 2 个模型有错误的包，返回 400，第 1 个模型也没有被创建。
-- [ ] 清空数据库后导入 `mes.json`，能完整恢复。
+- [x] 全程不重启：新建模型 → 菜单接口里出现 → 数据接口可用 → 给模型加字段 → 新字段立刻可读写。
+- [x] 把 `export` 的结果原样 `import` 回去，所有模型不变。
+- [x] 导入一个第 2 个模型有错误的包，返回 400，第 1 个模型也没有被创建。
+- [x] 清空数据库后导入 `mes.json`，能完整恢复。
+
+**实现说明（2026-11-22）：** 决策 010 见 [010](../decisions/010-元模型改了怎么让前端知道.md)。`MetaApiTest` 新增 `newModelNewFieldAndDataApiWorkWithoutRestart`，把“新建模型 → 菜单 → 数据接口 → 加字段 → 新字段读写”串成一条不重启的验收；`importIsAllOrNothing`、`exportedBundleCanBeImportedBackUnchanged`、`importsTheContractSample` 覆盖导入原子性和空库恢复。全量 119 个测试通过。DDL 不能回滚的限制和导入前备份建议写进 010。
 
 ---
 
