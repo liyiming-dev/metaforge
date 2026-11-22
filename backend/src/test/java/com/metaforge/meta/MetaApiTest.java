@@ -15,8 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -28,6 +27,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.metaforge.TestTables;
+
+import tools.jackson.databind.node.ObjectNode;
 
 /** 从接口这一层测试 /api/meta：请求进来，经过校验、存库、刷新内存，再读出来。用内存数据库。 */
 @SpringBootTest
@@ -117,6 +118,38 @@ class MetaApiTest {
                     assertThat(row.get("name")).isEqualTo("螺丝 M3");
                     assertThat(row.get("brand")).isNull();
                 });
+    }
+
+    @Test
+    void newModelNewFieldAndDataApiWorkWithoutRestart() throws Exception {
+        importSample();
+
+        // 1. 新建模型，不重启；菜单里立刻出现
+        send(post("/api/meta/models"), SUPPLIER).andExpect(status().isOk());
+        mvc.perform(get("/api/meta/menus"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].children[*].model", contains("code_rule", "supplier")));
+
+        // 2. 数据接口立刻可用
+        String created = body(send(post("/api/data/supplier"), "{\"name\":\"客户甲\"}")
+                .andExpect(status().isOk()));
+        long id = SampleMeta.JSON.readTree(created).get("data").get("id").asLong();
+
+        // 3. 给模型加字段，不重启；旧数据仍能读
+        ObjectNode model = (ObjectNode) SampleMeta.JSON
+                .readTree(body(mvc.perform(get("/api/meta/models/supplier"))))
+                .get("data");
+        SampleMeta.addField(model, "address", "地址", "string");
+        send(put("/api/meta/models/supplier"), model.toString()).andExpect(status().isOk());
+
+        // 4. 新字段立刻可写、可读
+        send(put("/api/data/supplier/" + id), "{\"address\":\"深圳\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.address").value("深圳"));
+        mvc.perform(get("/api/data/supplier/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("客户甲"))
+                .andExpect(jsonPath("$.data.address").value("深圳"));
     }
 
     @Test
