@@ -1,0 +1,60 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "浏览器（Vue 3 SPA）" {
+  [页面 pages\nHomePage / ModelListPage\nModelEditPage / ModuleListPage] as PAGES
+  [通用组件 components\nModelTable / ModelForm\nfields/*] as COMP
+  [状态层 stores\nuseMenuStore / useModelStore] as STORE
+  [数据访问层 api\nmetaApi / dataApi / callService] as API
+}
+
+package "后端（Spring Boot 4）" {
+  [MetaController\n/api/meta] as MC
+  [MetaService] as MS
+  [MetaValidator] as MV
+  [MetaRepository] as MR
+  [MetaRegistry\n内存缓存] as REG
+  [SchemaSync\n建表改表] as SS
+  [DdlBuilder] as DDL
+  [DataController\n/api/data/{model}] as DC
+  [DataService] as DS
+  [SqlBuilder] as SB
+  [SvcController\n/api/svc/{model}/{service}] as SC
+  [ServiceRunner] as SR
+  [ScriptEngine\nAviatorScriptEngine] as SE
+  [ScriptDb\n受控 db 函数] as SDB
+}
+
+database "MySQL 9.6" as DB
+
+PAGES --> COMP
+COMP --> STORE
+STORE --> API
+API --> MC : HTTP/JSON
+API --> DC
+API --> SC
+
+MC --> MS
+MS --> MV
+MS --> MR
+MS --> SS
+MS --> REG
+SS --> DDL
+SS --> DB
+MR --> DB
+
+DC --> DS
+DS --> SB
+DS --> REG
+DS --> DB
+
+SC --> SR
+SR --> SE
+SR --> DS
+SE --> SDB
+SDB --> DS
+
+note right of MS : 设计态：定义模块、模型、\n字段、视图、服务
+note right of DS : 运行态：任意模型的\n增删改查与关联查询
+@enduml

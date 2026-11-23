@@ -1,0 +1,83 @@
+@startuml
+skinparam shadowing false
+hide empty members
+
+class ModuleDef {
+  name
+  displayName
+  icon
+  sort
+}
+class ModelDef {
+  name
+  displayName
+  module
+  showInMenu
+  sort
+  fields
+  services
+  views
+}
+class FieldDef {
+  name
+  displayName
+  type
+  required
+  unique
+  readonly
+  defaultValue
+  length / precision / scale
+  options
+  relation
+}
+class EnumOption {
+  value
+  label
+}
+class RelationDef {
+  model
+  displayField
+  mappedBy
+}
+class ServiceDef {
+  name
+  displayName
+  trigger
+  scope
+  script
+}
+class ViewsDef {
+  list
+  form
+}
+class ListViewDef {
+  columns
+  searchFields
+  defaultSort
+  pageSize
+}
+class FormViewDef {
+  groups
+  tabs
+}
+class FormGroupDef {
+  title
+  columns
+  fields
+}
+class FormTabDef {
+  title
+  field
+}
+
+ModuleDef "1" -- "0..*" ModelDef : 包含
+ModelDef "1" *-- "0..*" FieldDef : 定义
+ModelDef "1" *-- "0..*" ServiceDef : 挂载
+ModelDef "1" *-- "1" ViewsDef : 配置
+ViewsDef "1" *-- "0..1" ListViewDef
+ViewsDef "1" *-- "0..1" FormViewDef
+FormViewDef "1" *-- "0..*" FormGroupDef
+FormViewDef "1" *-- "0..*" FormTabDef
+FieldDef "0..*" o-- "0..*" EnumOption : 枚举选项
+FieldDef "0..1" -- "0..1" RelationDef : 关联定义
+@enduml

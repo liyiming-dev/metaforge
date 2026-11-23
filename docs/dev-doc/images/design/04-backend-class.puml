@@ -1,0 +1,125 @@
+@startuml
+skinparam shadowing false
+hide empty members
+
+package "com.metaforge.meta" {
+  class MetaController {
+    +menus()
+    +listModules()
+    +saveModule(name, input)
+    +deleteModule(name)
+    +listModels()
+    +getModel(name)
+    +createModel(input)
+    +updateModel(name, input)
+    +deleteModel(name)
+    +exportAll()
+    +importBundle(bundle)
+  }
+  class MetaService {
+    +listModules()
+    +saveModule(name, input)
+    +deleteModule(name)
+    +createModel(input)
+    +updateModel(name, input)
+    +deleteModel(name)
+    +exportAll()
+    +importBundle(bundle)
+    +menus()
+  }
+  class MetaValidator
+  class MetaRepository {
+    +findAllModules()
+    +saveModule(module)
+    +deleteModule(name)
+    +findAllModels()
+    +insertModel(model)
+    +updateModel(model)
+    +deleteModel(name)
+  }
+  class MetaRegistry {
+    +reload()
+    +modules()
+    +models()
+    +findModel(name)
+    +requireModel(name)
+  }
+  class SchemaSync {
+    +create(model)
+    +alter(oldModel, newModel)
+    +drop(model)
+    +dropQuietly(model)
+  }
+  class DdlBuilder {
+    +createTable(model)
+    +alterTable(oldModel, newModel, backupSuffix)
+    +backupTable(model, backupSuffix)
+  }
+}
+
+package "com.metaforge.data" {
+  class DataController {
+    +search(model, request)
+    +get(model, id)
+    +options(model, keyword, limit, displayField)
+    +create(model, body)
+    +update(model, id, body)
+    +delete(model, id)
+  }
+  class DataService {
+    +search(modelName, request)
+    +get(modelName, id)
+    +options(modelName, keyword, limit, displayField)
+    +create(modelName, body)
+    +update(modelName, id, body)
+    +delete(modelName, id)
+    +getForScript(...)
+    +incrementForScript(...)
+  }
+  class SqlBuilder {
+    +search(model, request)
+    +selectById(model)
+    +options(model, labelField, keyword, limit)
+    +existsById(model)
+  }
+  class FieldValues
+}
+
+package "com.metaforge.svc" {
+  interface ScriptEngine {
+    +execute(script, context)
+  }
+  class AviatorScriptEngine
+  class ServiceRunner {
+    +runManual(modelName, serviceName, id, params)
+    +runHooks(model, trigger, record, params)
+  }
+  class ScriptDb {
+    +get(model, id)
+    +find(model, field, value)
+    +update(model, id, values)
+    +increment(model, id, field)
+    +today(pattern)
+    +call(model, service, id, params)
+  }
+}
+
+MetaController --> MetaService
+MetaService --> MetaValidator
+MetaService --> MetaRepository
+MetaService --> MetaRegistry
+MetaService --> SchemaSync
+SchemaSync --> DdlBuilder
+MetaRepository ..> MetaRegistry : 启动时加载
+
+DataController --> DataService
+DataService --> SqlBuilder
+DataService --> FieldValues
+DataService ..> MetaRegistry : 取模型定义
+
+ServiceRunner --> ScriptEngine
+ServiceRunner --> DataService
+AviatorScriptEngine ..|> ScriptEngine
+AviatorScriptEngine --> ScriptDb
+ScriptDb --> DataService
+@enduml
