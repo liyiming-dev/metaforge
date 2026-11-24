@@ -42,7 +42,7 @@ export const mesBundle: MetaBundle = {
           name: 'fill_code',
           displayName: '自动生成物料编码',
           trigger: 'beforeCreate',
-          script: '待改写：保存前如果没有 code，就按名称为 material 的编码规则生成一个。',
+          script: 'if (record.code == nil) {\n  let rule = db.find("code_rule", "name", "material");\n  if (rule == nil) { throw "没有找到 material 编码规则"; }\n  record.code = db.call("code_rule", "generate", rule.id);\n}',
         },
       ],
       views: {
@@ -89,7 +89,7 @@ export const mesBundle: MetaBundle = {
           name: 'fill_code',
           displayName: '自动生成产品编码',
           trigger: 'beforeCreate',
-          script: '待改写：保存前如果没有 code，就按名称为 product 的编码规则生成一个。',
+          script: 'if (record.code == nil) {\n  let rule = db.find("code_rule", "name", "product");\n  if (rule == nil) { throw "没有找到 product 编码规则"; }\n  record.code = db.call("code_rule", "generate", rule.id);\n}',
         },
       ],
       views: {
@@ -174,7 +174,7 @@ export const mesBundle: MetaBundle = {
           displayName: '生成编码',
           trigger: 'manual',
           scope: 'record',
-          script: '待改写：流水号加 1，返回 前缀 + 日期 + 补零的流水号。',
+          script: 'let serial = db.increment("code_rule", record.id, "current_serial");\nlet date = "";\nif (record.date_format != "none") {\n  date = db.today(record.date_format) + "-";\n}\nlet digits = "" + serial;\nwhile (string.length(digits) < record.serial_digits) {\n  digits = "0" + digits;\n}\nreturn record.prefix + date + digits;',
         },
       ],
       views: {
