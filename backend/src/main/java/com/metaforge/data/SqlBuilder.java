@@ -186,6 +186,13 @@ public class SqlBuilder {
                 + " WHERE " + quote(SystemFields.ID) + " = :" + SystemFields.ID;
     }
 
+    /** 脚本的 db.increment：只允许对整数业务字段做原子加 1。 */
+    public String increment(ModelDef model, FieldDef field) {
+        return "UPDATE " + quote(model.tableName())
+                + " SET " + quote(field.name()) + " = " + quote(field.name()) + " + 1"
+                + " WHERE " + quote(SystemFields.ID) + " = :" + SystemFields.ID;
+    }
+
     public String deleteById(ModelDef model) {
         return "DELETE FROM " + quote(model.tableName())
                 + " WHERE " + quote(SystemFields.ID) + " = :" + SystemFields.ID;

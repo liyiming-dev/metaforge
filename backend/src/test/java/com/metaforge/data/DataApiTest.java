@@ -67,6 +67,16 @@ class DataApiTest {
 
     private void importSample() throws Exception {
         send(post("/api/meta/import"), sampleJson).andExpect(status().isOk());
+        // B5：物料/产品的 beforeCreate 脚本会找对应编码规则；测试里先把两条规则建好
+        seedCodeRule("material", "MAT-");
+        seedCodeRule("product", "PROD-");
+    }
+
+    private void seedCodeRule(String name, String prefix) throws Exception {
+        send(post("/api/data/code_rule"),
+                "{\"name\":\"" + name + "\",\"prefix\":\"" + prefix
+                        + "\",\"date_format\":\"yyyyMMdd\",\"serial_digits\":4}")
+                .andExpect(status().isOk());
     }
 
     private long create(String model, String body) throws Exception {
@@ -95,8 +105,8 @@ class DataApiTest {
                 .andExpect(jsonPath("$.data.unit").value("个"))
                 .andExpect(jsonPath("$.data.safety_stock").value(0))
                 .andExpect(jsonPath("$.data.enabled").value(true))
-                // 没有默认值的字段是 null
-                .andExpect(jsonPath("$.data.code").value(nullValue()))
+                // B5：beforeCreate 的 fill_code 会自动填上编码
+                .andExpect(jsonPath("$.data.code").value(not(nullValue())))
                 // 系统字段由服务端写
                 .andExpect(jsonPath("$.data.created_at").isNotEmpty())
                 .andExpect(jsonPath("$.data.updated_at").isNotEmpty());

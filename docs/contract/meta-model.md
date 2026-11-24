@@ -133,7 +133,56 @@
 
 前端的显示规则：`manual` 且 `scope` 为 `record` 的服务，显示成列表每一行操作列里的按钮；`scope` 为 `model` 的显示成列表上方工具栏的按钮。其它触发方式的服务不显示按钮。
 
-脚本用什么语言、脚本里能访问哪些变量，由后端在决策记录 006 里确定，定下来之后补到这份文档里。`samples/mes.json` 里的脚本目前是文字描述，届时一起改写。
+脚本语言是 **AviatorScript 5.4.4**，由后端开启 sandbox 后执行。脚本不能直接访问 `JdbcTemplate`、JDBC、文件系统或任意 Java 类，只能使用下面列出的变量和 `db` 函数；表名、列名仍然由后端从模型定义取，值一律参数绑定。
+
+### 脚本变量
+
+| 变量 | 类型 | 说明 |
+|---|---|---|
+| `record` | map | 当前记录。`manual` 且 `scope` 为 `record` 时是选中的那条记录；`scope` 为 `model` 时是空 map；`beforeCreate`/`beforeUpdate` 时可以修改，修改后的值会写进数据库；`afterCreate`/`afterUpdate`/`beforeDelete` 时是已保存/待删除记录的只读视图 |
+| `params` | map | 服务接口传入的 `params`；生命周期钩子没有参数，是空 map |
+
+`record` 里是字段名到值的映射；多对一字段的值是目标记录的 `id`，一对多字段不在 `record` 里。系统字段（`id`、`created_at`、`updated_at`）可以读，但不能通过脚本修改。
+
+### `db` 函数
+
+| 函数 | 返回 | 说明 |
+|---|---|---|
+| `db.get(model, id)` | map 或 `nil` | 按 id 读一条记录 |
+| `db.find(model, field, value)` | map 或 `nil` | 按一个字段的精确值找第一条记录；`field` 必须是该模型已定义的字段 |
+| `db.update(model, id, values)` | map | 按 id 修改一条记录，返回修改后的记录；`values` 是字段名到新值的 map，字段校验、必填、关联校验和普通修改接口一致 |
+| `db.increment(model, id, field)` | number | 把整数字段原子加 1，返回加完后的值。并发生成编码必须用它，不能先查再写 |
+| `db.today(pattern)` | string | 按 Java 日期格式返回服务器当天日期，例如 `db.today("yyyyMMdd")` |
+| `db.call(model, service, id, params)` | 任意 JSON 值 | 调用另一个 `manual` 服务的脚本，返回它的返回值；`id` 和 `params` 可以传 `nil`，只传三个参数时等价于 `params` 为 `{}` |
+
+`db.update` 和 `db.increment` 不触发目标模型的 `beforeUpdate`/`afterUpdate` 钩子，避免脚本里的写操作递归触发同一钩子；普通的 `/api/data` 修改接口仍然会触发钩子。
+
+`db.call` 只能调用 `manual` 服务，调用链不能形成环；后端检测到递归会报错。服务调用和当前操作在同一个事务里，被调服务出错时整个操作回滚。
+
+### 错误、超时和死循环
+
+- 脚本语法错误、运行时错误、`throw` 出来的错误：服务接口返回 400，`message` 说明是哪条服务、什么原因；生命周期钩子出错时，这次新增/修改/删除整体回滚。
+- 后端给脚本设置执行时间上限和循环次数上限；超时或超限按脚本错误处理，不会让请求一直挂住。
+- `beforeDelete` 里 `throw` 可以阻止删除；其它钩子的返回值被忽略，要修改记录请改 `record`。
+
+### 示例：编码规则的 `generate`
+
+```javascript
+let serial = db.increment("code_rule", record.id, "current_serial");
+let date = "";
+if (record.date_format != "none") {
+  date = db.today(record.date_format) + "-";
+}
+let digits = "" + serial;
+while (string.length(digits) < record.serial_digits) {
+  digits = "0" + digits;
+}
+return record.prefix + date + digits;
+```
+
+日期格式为 `none` 时 `date` 为空，返回“前缀 + 流水号”；否则返回“前缀 + 日期 + `-` + 流水号”，例如 `MAT-20261115-0001`。
+
+物料和产品的新建钩子见 `samples/mes.json`：用 `db.find` 找到对应编码规则，再用 `db.call` 调它的 `generate`，把返回值填进 `record.code`。
 
 ## 视图 ViewsDef
 

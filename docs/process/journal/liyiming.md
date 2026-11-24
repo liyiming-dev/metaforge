@@ -16,7 +16,7 @@ B4 关联关系：`GET /api/data/{model}/options`、多对一写入时检查目�
 
 **遇到的问题和解决过程**（现象 → 原因 → 怎么解决的）
 
-首页“模块数/模型数/字段总数”在真实后端下都是 0，快捷入口也空。先查接口，`/api/meta/modules` 和 `/api/meta/models` 都正常返回 2 和 4；再看 `HomePage.vue`，`onMounted` 里写的是 `if (useMock) loadStats()`，真实后端模式直接跳过。改成无条件调用 `loadStats()`，刷新后恢复 2/4/21 和快捷入口。
+检查首页“模块数/模型数/字段总数”时发现在真实后端下都是 0，快捷入口也是空的。先查接口，`/api/meta/modules` 和 `/api/meta/models` 都正常返回 2 和 4；再看 `HomePage.vue`，原来`onMounted` 里写的是 `if (useMock) loadStats()`，真实后端模式会直接跳过。改成无条件调用 `loadStats()`，刷新后正常显示 2/4/21 和快捷入口。
 
 **今天弄懂的一件事**（用自己的话写，假设是讲给没做过这部分的组员听）
 
