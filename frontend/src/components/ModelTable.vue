@@ -7,7 +7,8 @@ import { callService, dataApi } from '@/api/data'
 import { useModelStore } from '@/stores/model'
 import { SYSTEM_FIELD_TITLES, displayValue } from '@/components/fields/display'
 import ModelForm from '@/components/ModelForm.vue'
-import ManyToOneField from '@/components/fields/ManyToOneField.vue'
+import { searchFieldComponents } from '@/components/fields/search'
+import type { Component } from 'vue'
 import type { DataRecord, Filter } from '@/types/api'
 import type { FieldDef, ModelDef, ServiceDef, SortItem } from '@/types/meta'
 
@@ -97,8 +98,9 @@ const tableColumns = computed<TableColumnsType>(() => {
   return cols
 })
 
-function enumOptions(name: string): { value: string; label: string }[] {
-  return fieldByName(name)?.options ?? []
+/** 按字段类型取搜索控件（搜索区用注册表渲染，不在模板里写 v-if） */
+function searchComponentOf(name: string): Component {
+  return searchFieldComponents[fieldOf(name).type] as Component
 }
 
 /** 组装本次查询的过滤条件：固定条件 + 搜索区里用户填了的条件 */
@@ -335,48 +337,11 @@ defineExpose({ reload: load })
     <a-card v-if="hasSearch" class="search-card">
       <a-form layout="inline">
         <a-form-item v-for="name in searchFieldNames" :key="name" :label="columnTitle(name)">
-          <a-input
-            v-if="fieldType(name) === 'string' || fieldType(name) === 'text'"
-            v-model:value="searchValues[name]"
-            allow-clear
-            placeholder="请输入"
-            style="width: 160px"
-          />
-          <a-select
-            v-else-if="fieldType(name) === 'enum'"
-            v-model:value="searchValues[name]"
-            allow-clear
-            placeholder="请选择"
-            style="width: 160px"
-          >
-            <a-select-option v-for="opt in enumOptions(name)" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </a-select-option>
-          </a-select>
-          <a-select
-            v-else-if="fieldType(name) === 'boolean'"
-            v-model:value="searchValues[name]"
-            allow-clear
-            placeholder="请选择"
-            style="width: 120px"
-          >
-            <a-select-option :value="true">是</a-select-option>
-            <a-select-option :value="false">否</a-select-option>
-          </a-select>
-          <a-input-number
-            v-else-if="fieldType(name) === 'integer' || fieldType(name) === 'decimal'"
-            v-model:value="searchValues[name]"
-            style="width: 140px"
-          />
-          <a-range-picker
-            v-else-if="fieldType(name) === 'date' || fieldType(name) === 'datetime'"
-            v-model:value="searchValues[name]"
-            value-format="YYYY-MM-DD"
-          />
-          <ManyToOneField
-            v-else-if="fieldType(name) === 'manyToOne'"
+          <component
+            :is="searchComponentOf(name)"
             :model-value="searchValues[name]"
             :field="fieldOf(name)"
+            class="search-control"
             @update:model-value="(v: unknown) => (searchValues[name] = v)"
           />
         </a-form-item>
@@ -478,6 +443,10 @@ defineExpose({ reload: load })
 
 .reset-btn {
   margin-left: 8px;
+}
+
+.search-control {
+  width: 200px;
 }
 
 .service-result-primitive {

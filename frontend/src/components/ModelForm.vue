@@ -173,6 +173,8 @@ async function onSubmit(): Promise<void> {
     const data: DataRecord = {}
     for (const field of modelDef.value?.fields ?? []) {
       if (field.type === 'oneToMany') continue
+      // 只读字段不提交，交给后端钩子或默认值生成（如自动生成的编码）
+      if (field.readonly === true) continue
       const value = formState.value[field.name]
       if (field.type === 'manyToOne' && value && typeof value === 'object' && 'id' in value) {
         data[field.name] = (value as { id: unknown }).id
