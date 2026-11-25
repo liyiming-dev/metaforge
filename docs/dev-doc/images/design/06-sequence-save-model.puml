@@ -1,0 +1,43 @@
+@startuml
+skinparam shadowing false
+autonumber
+
+actor "平台开发者" as DEV
+participant "ModelEditPage.vue" as PAGE
+participant "metaApi" as API
+participant "MetaController" as MC
+participant "MetaService" as MS
+participant "MetaValidator" as MV
+participant "MetaDefaults" as MD
+participant "SchemaSync" as SS
+participant "DdlBuilder" as DDL
+participant "MetaRepository" as MR
+participant "MetaRegistry" as REG
+database "MySQL" as DB
+
+DEV -> PAGE : 填写模型、字段、视图、服务
+PAGE -> API : createModel(ModelDef)
+API -> MC : POST /api/meta/models
+MC -> MS : createModel(input)
+MS -> MV : validate(input)
+alt 校验不通过
+  MV --> MS : 字段级错误列表
+  MS --> MC : 抛 BizException(400)
+  MC --> API : 400 + fieldErrors
+  API --> PAGE : 字段下方标红
+else 校验通过
+  MS -> MD : normalize(input)\n补默认值与缺省视图
+  MD --> MS : ModelDef
+  MS -> SS : create(model) / alter(old, model)
+  SS -> DDL : createTable(model)
+  DDL --> SS : CREATE TABLE md_xxx (...)
+  SS -> DB : 执行 DDL
+  MS -> MR : saveModel(model)
+  MR -> DB : INSERT/UPDATE meta_model
+  MS -> REG : reload()
+  MS --> MC : ModelDef
+  MC --> API : 200
+  API --> PAGE : 保存成功
+  PAGE -> PAGE : useMenuStore.reload()\n菜单立即出现
+end
+@enduml

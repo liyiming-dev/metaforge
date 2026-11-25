@@ -1,0 +1,156 @@
+@startuml
+skinparam shadowing false
+hide empty members
+
+package "meta 包" {
+  class MetaController {
+    +menus()
+    +modules()
+    +saveModule(name, input)
+    +deleteModule(name)
+    +models()
+    +model(name)
+    +createModel(input)
+    +updateModel(name, input)
+    +deleteModel(name)
+    +exportAll()
+    +importBundle(bundle)
+  }
+  class MetaService {
+    +listModules()
+    +saveModule(name, input)
+    +deleteModule(name)
+    +listModels()
+    +getModel(name)
+    +createModel(input)
+    +updateModel(name, input)
+    +deleteModel(name)
+    +exportAll()
+    +importBundle(bundle)
+    +menus()
+  }
+  class MetaValidator {
+    +validateModule(def)
+    +validateModel(def, old, ctx)
+  }
+  class MetaDefaults {
+    +normalize(ModuleDef)
+    +normalize(ModelDef)
+  }
+  class MetaRegistry {
+    +reload()
+    +modules()
+    +models()
+    +findModule(name)
+    +findModel(name)
+    +requireModel(name)
+    +context()
+  }
+  class MetaRepository {
+    +findAllModules()
+    +saveModule(module)
+    +deleteModule(name)
+    +findAllModels()
+    +insertModel(model)
+    +updateModel(model)
+    +deleteModel(name)
+  }
+}
+
+package "schema 包" {
+  class SchemaSync {
+    +create(model)
+    +alter(oldModel, newModel)
+    +drop(model)
+    +dropQuietly(model)
+  }
+  class DdlBuilder {
+    +createTable(model)
+    +alterTable(oldModel, newModel, backupSuffix)
+    +backupTable(model, backupSuffix)
+    +probeTable(model)
+    +dropTableIfExists(model)
+    +uniqueName(model, field)
+  }
+  class FieldTypeRegistry {
+    +get(type)
+  }
+}
+
+package "data 包" {
+  class DataController {
+    +search(model, request)
+    +get(model, id)
+    +options(model, keyword, limit, displayField)
+    +create(model, body)
+    +update(model, id, body)
+    +delete(model, id)
+  }
+  class DataService {
+    +search / get / options
+    +create / update / delete
+    +getForScript(model, id)
+    +findForScript(model, field, value)
+    +updateForScript(model, id, body)
+    +incrementForScript(model, id, field)
+  }
+  class SqlBuilder {
+    +search / selectById / options / labelSelect
+    +existsById / countReferences
+    +insert / update / deleteById / increment
+    +（其余列名工具方法省略）
+  }
+  class FieldValues {
+    +toColumn(field, value)
+    +toJson(field, value)
+    +systemField(name)
+  }
+}
+
+package "svc 包" {
+  class SvcController {
+    +call(model, service, id, params)
+  }
+  class ServiceRunner {
+    +runManual(modelName, serviceName, id, params)
+    +runHooks(model, trigger, record, params)
+  }
+  interface ScriptEngine {
+    +execute(script, context)
+  }
+  class AviatorScriptEngine
+  class ScriptDb {
+    +get / find / update
+    +increment / today / call
+  }
+}
+
+package "common 包" {
+  class Result
+  class BizException
+  class ErrorCode
+}
+
+MetaController --> MetaService
+MetaService --> MetaRepository
+MetaService --> MetaValidator
+MetaService --> SchemaSync
+MetaService ..> MetaRegistry : 使用
+MetaService ..> MetaDefaults : 使用
+MetaRegistry --> MetaRepository : 启动时加载
+SchemaSync --> DdlBuilder
+DdlBuilder --> FieldTypeRegistry
+
+DataController --> DataService
+DataService --> SqlBuilder
+DataService --> FieldValues
+DataService ..> MetaRegistry : 取模型定义
+
+SvcController --> ServiceRunner
+ServiceRunner --> MetaRegistry : 找服务定义
+ServiceRunner --> ScriptEngine
+ServiceRunner --> DataService
+AviatorScriptEngine ..|> ScriptEngine
+ScriptDb --> DataService
+ScriptDb --> ServiceRunner : db.call
+@enduml

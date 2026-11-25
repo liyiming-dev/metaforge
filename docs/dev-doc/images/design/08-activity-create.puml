@@ -1,0 +1,32 @@
+@startuml
+skinparam shadowing false
+start
+:业务用户点“新增”;
+:前端按视图定义渲染表单\n带出默认值、只读字段置灰;
+if (表单必填校验通过？) then (否)
+  :字段下方提示“请填写 xxx”;
+  stop
+else (是)
+endif
+:提交 POST /api/data/{model};
+:后端 fromBody() 转换字段值;
+:执行 beforeCreate 钩子\n（如自动生成编码）;
+if (钩子执行成功？) then (否)
+  :整条新增失败，不写库;
+  :返回错误，指出服务与原因;
+  stop
+else (是)
+endif
+:required 校验 / 类型 / 枚举 / 关联存在性;
+if (校验通过？) then (否)
+  :返回 400 + fieldErrors;
+  :前端在对应字段下标红;
+  stop
+else (是)
+endif
+:SqlBuilder.insert() 写入业务表;
+:执行 afterCreate 钩子;
+:返回完整记录;
+:前端刷新列表，新记录出现;
+stop
+@enduml
