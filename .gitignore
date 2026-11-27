@@ -19,3 +19,7 @@ frontend/dist/
 .env
 *.local
 *.log
+
+# AI 会话记忆和对话历史提取（本机专用，不进公开仓库）
+MEMORY.md
+对话历史-提取.txt
