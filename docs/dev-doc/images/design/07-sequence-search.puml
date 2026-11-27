@@ -1,0 +1,34 @@
+@startuml
+skinparam shadowing false
+autonumber
+
+actor "业务用户" as USER
+participant "ModelListPage.vue" as PAGE
+participant "ModelTable.vue" as TABLE
+participant "dataApi" as API
+participant "DataController" as DC
+participant "DataService" as DS
+participant "MetaRegistry" as REG
+participant "SqlBuilder" as SB
+database "MySQL" as DB
+
+USER -> PAGE : 点左侧菜单“物料”
+PAGE -> TABLE : 传入 model = material
+TABLE -> API : search("material", {page,size,filters,sort})
+API -> DC : POST /api/data/material/search
+DC -> DS : search("material", request)
+DS -> REG : get("material")
+REG --> DS : ModelDef
+DS -> SB : search(model, request)\n生成 SELECT 与 COUNT 两条 SQL
+SB --> DS : SQL + 参数（表名/列名来自元模型）
+DS -> DB : 执行 COUNT，再执行 SELECT（值全部参数绑定）
+DB --> DS : 记录行
+DS -> DS : toRecords() 组装结果
+opt 记录里有多对一字段
+  DS -> SB : labelSelect(model, labelField)
+  DS -> DB : 批量 IN 查询 label
+end
+DS --> DC : SearchResult(records, total)
+DC --> API : 200
+API --> TABLE : 渲染表格
+@enduml

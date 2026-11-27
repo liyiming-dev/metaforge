@@ -1,0 +1,38 @@
+@startuml
+skinparam shadowing false
+hide empty members
+
+package "schema 包" {
+  interface FieldTypeHandler {
+    +type() : String
+    +columnType(field) : String
+    +toColumn(field, value) : Object
+    +toJson(field, value) : Object
+  }
+  class FieldTypeRegistry {
+    +get(type) : FieldTypeHandler
+  }
+  class StringType
+  class TextType
+  class IntegerType
+  class DecimalType
+  class BooleanType
+  class DateType
+  class DateTimeType
+  class EnumType
+  class ManyToOneType
+  class OneToManyType
+}
+
+FieldTypeRegistry o-- FieldTypeHandler
+FieldTypeHandler <|.. StringType
+FieldTypeHandler <|.. TextType
+FieldTypeHandler <|.. IntegerType
+FieldTypeHandler <|.. DecimalType
+FieldTypeHandler <|.. BooleanType
+FieldTypeHandler <|.. DateType
+FieldTypeHandler <|.. DateTimeType
+FieldTypeHandler <|.. EnumType
+FieldTypeHandler <|.. ManyToOneType
+FieldTypeHandler <|.. OneToManyType
+@enduml
