@@ -144,17 +144,19 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 新建物料只传 `name`，返回的记录带 `id`，`category` 是 `raw`，`unit` 是“个”。
-- [ ] 不传 `name`，返回 400，`fieldErrors.name` 有提示。
-- [ ] 新建两条 `code` 相同的记录，第二条返回 409，`fieldErrors.code` 有提示。
-- [ ] 修改时只传 `spec`，其它字段不变，`updated_at` 变了。
-- [ ] 查询：`like`、`in`、排序、第 2 页都正确，`total` 正确。
-- [ ] 注入测试一：`filters` 里的 `field` 传 `name; DROP TABLE md_material`，返回 400，表还在。
-- [ ] 注入测试二：`value` 传 `' OR '1'='1`，被当成普通字符串，查不到记录。
-- [ ] 注入测试三：`sort` 里的 `order` 传 `desc; drop table`，返回 400。
-- [ ] 模型名不存在时，各接口都返回 404。
-- [ ] 新建一个模型后，不重启就能对它调用这些接口。
-- [ ] `SqlBuilder` 对非法字段名、非法运算符各有一条单元测试。
+- [x] 新建物料只传 `name`，返回的记录带 `id`，`category` 是 `raw`，`unit` 是“个”。
+- [x] 不传 `name`，返回 400，`fieldErrors.name` 有提示。
+- [x] 新建两条 `code` 相同的记录，第二条返回 409，`fieldErrors.code` 有提示。
+- [x] 修改时只传 `spec`，其它字段不变，`updated_at` 变了。
+- [x] 查询：`like`、`in`、排序、第 2 页都正确，`total` 正确。
+- [x] 注入测试一：`filters` 里的 `field` 传 `name; DROP TABLE md_material`，返回 400，表还在。
+- [x] 注入测试二：`value` 传 `' OR '1'='1`，被当成普通字符串，查不到记录。
+- [x] 注入测试三：`sort` 里的 `order` 传 `desc; drop table`，返回 400。
+- [x] 模型名不存在时，各接口都返回 404。
+- [x] 新建一个模型后，不重启就能对它调用这些接口。
+- [x] `SqlBuilder` 对非法字段名、非法运算符各有一条单元测试。
+
+> B3 已于 2026-11-15 完成并合入 `main`（PR #8，`346ab84`）；全量 93 测试通过，真实 MySQL 验收项全过。
 
 ---
 
@@ -281,6 +283,8 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 - [ ] 调用 `generate` 之后，数据库没有任何变化。
 - [ ] 在学习日志里记下至少 3 个 AI 生成得不合适的例子，以及你是怎么发现、怎么处理的。
 
+> 状态说明：B7 为加分项、不排主线，经全组评估工期后确定本期不做（保留契约定义与设计思路，见决策 011）。
+
 ---
 
 ## B8 评审和收尾（11/16 起）
@@ -295,6 +299,6 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import -Conte
 
 **验收标准**
 
-- [ ] 每个合并进 `main` 的 PR 都有至少一条评审意见或确认。
-- [ ] 文档同学画的图里，类名和方法名与代码一致。
-- [ ] 决策 001 到 006、009 到 012 的决策记录都写完了，每个都有至少 3 次讨论记录。
+- [x] 每个合并进 `main` 的 PR 都有至少一条评审意见或确认。
+- [x] 文档同学画的图里，类名和方法名与代码一致。
+- [x] 决策 001 到 006、009 到 012 的决策记录都写完了，每个都有至少 3 次讨论记录（随 `docs/d8` 合入 `main` 闭环）。
