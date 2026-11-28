@@ -35,25 +35,42 @@
 
 ## 快速启动
 
-详细环境要求与常见问题排查见 [docs/tasks/00-setup.md](docs/tasks/00-setup.md)。
+**环境要求**：JDK 21+、Node.js `20.19+`（或 `22.12+`）、MySQL 8+（无需单独安装 Maven，项目自带 `mvnw`；国内镜像已内置在 `backend/pom.xml` 和 `frontend/.npmrc` 中）。更多排查见 [docs/tasks/00-setup.md](docs/tasks/00-setup.md)。
 
-### 1. 准备后端数据库配置并启动（端口 8200）
+### 1. 配置数据库并启动后端（端口 8200）
 
-1. 将 `backend/src/main/resources/application-local.example.yml` 复制为 `application-local.yml`（该文件已 gitignore），填入本机 MySQL 账号密码。首次启动会自动创建 `metaforge` 数据库和元模型表。
-2. 在 `backend/` 目录启动后端：
+1. 将 `backend/src/main/resources/application-local.example.yml` 复制为 `application-local.yml`（已 gitignore），填入本机 MySQL 的账号和密码。首次启动会自动创建 `metaforge` 数据库及两张元模型表（`meta_module`、`meta_model`），无需手工建库。
+2. 在 `backend/` 目录启动后端（macOS / Linux 将 `.\mvnw.cmd` 换为 `./mvnw`）：
 
    ```bash
+   cd backend
    .\mvnw.cmd spring-boot:run
    ```
 
    访问 <http://localhost:8200/api/health> 返回 `"status": "UP"` 即启动成功。
 
-### 2. 导入 MES 示例元模型
+### 2. 启动前端（端口 5173）
 
-后端启动后，任选一种方式导入示例元模型（2 个模块、4 个模型）：
+另开一个终端，在 `frontend/` 目录安装依赖并启动（默认 `VITE_USE_MOCK=false`，通过 Vite 代理直连 `http://localhost:8200`）：
 
-- **方式一（页面导入）**：启动前端后，进入左侧「平台设计 → 模型管理」，点击「导入」，选择 `docs/contract/samples/mes.json`。
-- **方式二（命令行导入，PowerShell）**：
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+浏览器打开 <http://localhost:5173>，首页「环境检查」显示后端连接正常即可开始使用。
+
+> 如需在**不启动后端和 MySQL** 的情况下快速预览界面，可将 [frontend/.env.development](frontend/.env.development) 中的 `VITE_USE_MOCK` 临时改为 `true` 后重启前端。
+
+### 3. 导入 MES 示例元模型
+
+任选一种方式导入内置的 MES 元模型（2 个模块、4 个模型、21 个字段，自动建出 4 张 `md_*` 业务表）：
+
+- **方式一（推荐，页面导入）**：进入左侧「平台设计 → 模型管理」→ 点击「导入」→ 选择 `docs/contract/samples/mes.json` → 点击「确认导入」。导入后左侧菜单会立刻出现「生产管理」和「基础设置」。
+- **方式二（命令行导入，在项目根目录 `metaforge/` 执行）**：
+
+  Windows PowerShell：
 
   ```powershell
   Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/meta/import `
@@ -61,18 +78,33 @@
     -InFile docs/contract/samples/mes.json
   ```
 
-### 3. 启动前端（端口 5173）
+  macOS / Linux / Git Bash：
 
-在 `frontend/` 目录安装依赖并启动（默认 `VITE_USE_MOCK=false`，直连 `http://localhost:8200`）：
+  ```bash
+  curl -X POST http://localhost:8200/api/meta/import \
+    -H "Content-Type: application/json; charset=utf-8" \
+    --data-binary @docs/contract/samples/mes.json
+  ```
 
-```bash
-npm install
-npm run dev
-```
+### 4. 初始化 2 条编码规则（启用自动编码）
 
-浏览器打开 <http://localhost:5173>，首页「环境检查」显示后端连接正常，左侧菜单出现「生产管理」和「基础设置」即可开始使用。
+`mes.json` 只包含元模型定义、不含业务数据；而「物料」和「产品」的新增前脚本会读取名为 `material` 和 `product` 的编码规则，因此在新增物料/产品前需先添加这两条规则（任选一种方式）：
 
-> 如需在**不启动后端和 MySQL** 的情况下快速预览界面，可将 [frontend/.env.development](frontend/.env.development) 中的 `VITE_USE_MOCK` 临时改为 `true` 后重启前端。
+- **方式一（页面添加）**：进入左侧「基础设置 → 编码规则」，分别点击「新增」保存以下两条记录（日期格式、流水号位数、当前流水号保持默认值即可）：
+  - 规则名称：`material`，前缀：`MAT-`
+  - 规则名称：`product`，前缀：`PRD-`
+- **方式二（PowerShell 一键写入）**：
+
+  ```powershell
+  Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/data/code_rule -ContentType 'application/json; charset=utf-8' -Body '{"name":"material","prefix":"MAT-"}'
+  Invoke-RestMethod -Method Post -Uri http://localhost:8200/api/data/code_rule -ContentType 'application/json; charset=utf-8' -Body '{"name":"product","prefix":"PRD-"}'
+  ```
+
+完成后即可正常体验：
+- 「生产管理 → 物料 → 新增」：留空只读的「物料编码」，保存后自动生成 `MAT-YYYYMMDD-0001`；
+- 「生产管理 → 产品 → 新增」：自动生成产品编码，保存后编辑进入「BOM 明细」标签页关联物料；
+- 「基础设置 → 编码规则」：点击操作列「生成编码」手动触发脚本服务；
+- 「平台设计 → 模型管理 → 新建模型」：保存后无需重启，左侧菜单立即出现并可增删改查、刷新不 404。
 
 ## 验证命令
 
